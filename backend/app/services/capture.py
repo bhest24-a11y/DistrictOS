@@ -3,7 +3,7 @@ import uuid
 import cv2
 import shutil
 from pathlib import Path
-from backend.app.core.config import RAW_DIR, FRAME_DIR, FRAME_SAMPLE_EVERY_SECONDS, DELETE_RAW_RECORDINGS_AFTER_EXTRACTION
+from app.core.config import RAW_DIR, FRAME_DIR, FRAME_SAMPLE_EVERY_SECONDS, DELETE_RAW_RECORDINGS_AFTER_EXTRACTION
 
 def save_upload(file_obj, filename: str) -> Path:
     safe_name = f"{uuid.uuid4().hex}_{filename}"
