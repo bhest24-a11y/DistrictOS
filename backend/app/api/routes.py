@@ -1,12 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, Form
 from pathlib import Path
 import shutil
-from backend.app.services.capture import save_upload, extract_frames_from_video
-from backend.app.services.redaction import redact_image_text_regions
-from backend.app.services.parsers import parse_excel_or_csv, parse_image, parse_text_blob
-from backend.app.services.intelligence import generate_intelligence
-from backend.app.services.storage import save_records, save_summary
-from backend.app.core.config import RAW_DIR, FRAME_DIR
+from app.services.capture import save_upload, extract_frames_from_video
+from app.services.redaction import redact_image_text_regions
+from app.services.parsers import parse_excel_or_csv, parse_image, parse_text_blob
+from app.services.intelligence import generate_intelligence
+from app.services.storage import save_records, save_summary
+from app.core.config import RAW_DIR, FRAME_DIR
 
 router = APIRouter()
 
