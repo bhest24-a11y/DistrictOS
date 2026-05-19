@@ -2,8 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from backend.app.core.config import PROCESSED_DIR
-from backend.app.models.schemas import KPIRecord, IntelligenceOutput
+from app.core.config import PROCESSED_DIR
+from app.models.schemas import KPIRecord, IntelligenceOutput
 
 def save_records(records: list[KPIRecord]) -> Path:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
