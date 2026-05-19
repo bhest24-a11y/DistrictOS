@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <title>DistrictOS Browser Capture Prototype</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    #indicator { display:none; color:white; background:#b00020; padding:10px; font-weight:bold; }
+    button { padding:12px 18px; margin:8px; }
+  </style>
+</head>
+<body>
+  <h1>DistrictOS Record & Analyze Prototype</h1>
+  <div id="indicator">● RECORDING — user initiated</div>
+  <p>This browser prototype records only after the user clicks Start Capture.</p>
+  <button onclick="startCapture()">Start Capture</button>
+  <button onclick="stopCapture()">Stop & Download Recording</button>
+
+  <script>
+    let recorder;
+    let chunks = [];
+
+    async function startCapture() {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false
+      });
+
+      document.getElementById("indicator").style.display = "block";
+      chunks = [];
+      recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        document.getElementById("indicator").style.display = "none";
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "districtos_capture.webm";
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      recorder.start();
+    }
+
+    function stopCapture() {
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    }
+  </script>
+</body>
+</html>
