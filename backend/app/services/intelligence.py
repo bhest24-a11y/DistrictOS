@@ -1,5 +1,5 @@
 from collections import defaultdict
-from backend.app.models.schemas import KPIRecord, IntelligenceOutput
+from app.models.schemas import KPIRecord, IntelligenceOutput
 
 def generate_intelligence(records: list[KPIRecord]) -> IntelligenceOutput:
     off_track = [r for r in records if r.status == "off_track"]
