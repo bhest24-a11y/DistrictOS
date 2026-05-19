@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from PIL import Image
 import pytesseract
-from backend.app.models.schemas import KPIRecord
+from app.models.schemas import KPIRecord
 
 KNOWN_DEPARTMENTS = ["Produce", "Meat", "Deli", "Bakery", "Grocery", "Dairy", "Front End", "Store"]
 KNOWN_METRICS = ["sales", "shrink", "compliance", "labor", "forecast", "in-stock", "oos", "service", "margin"]
