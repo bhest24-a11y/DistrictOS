@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 API = "https://districtos.onrender.com/api"
 
@@ -10,57 +11,65 @@ st.set_page_config(
 )
 
 # -------------------------
-# GLOBAL STYLING 🔥
+# GLOBAL STYLE (ELITE UI)
 # -------------------------
 st.markdown("""
 <style>
 body {
-    background-color: #0E1117;
-    color: white;
+    background: #0B0F17;
+    color: #E6EAF2;
 }
 
+/* Sidebar */
 [data-testid="stSidebar"] {
-    background-color: #0B0D12;
+    background: #0A0D14;
+    border-right: 1px solid #1F2937;
 }
 
-h1, h2, h3 {
-    font-weight: 600;
-}
-
-.metric-card {
-    background: #151922;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #222;
-}
-
-.store-card {
-    background: #151922;
+/* Cards */
+.card {
+    background: linear-gradient(145deg, #111827, #0B1220);
     padding: 18px;
-    border-radius: 12px;
-    margin-bottom: 15px;
-    border: 1px solid #222;
+    border-radius: 14px;
+    border: 1px solid #1F2937;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
-.impact {
-    color: #FFB020;
-    font-size: 14px;
+/* KPI cards */
+.kpi {
+    font-size: 32px;
+    font-weight: 700;
 }
 
-.action {
-    color: #22C55E;
-    font-size: 14px;
+/* Labels */
+.label {
+    font-size: 12px;
+    color: #9CA3AF;
 }
 
-.alert {
-    color: #EF4444;
-    font-weight: bold;
+/* Severity colors */
+.red { color: #EF4444; }
+.yellow { color: #FACC15; }
+.green { color: #22C55E; }
+
+/* Section titles */
+.section-title {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #CBD5F5;
+}
+
+/* Divider spacing */
+.divider {
+    margin-top: 20px;
+    margin-bottom: 20px;
 }
 </style>
 """, unsafe_allow_html=True)
 
+
 # -------------------------
-# SIDEBAR (CONTROL PANEL)
+# SIDEBAR
 # -------------------------
 menu = st.sidebar.radio("", [
     "Command Center",
@@ -71,43 +80,60 @@ menu = st.sidebar.radio("", [
     "Ask AI"
 ])
 
-st.sidebar.markdown("### DistrictOS")
-st.sidebar.caption("Enterprise Intelligence System")
+st.sidebar.markdown("## DistrictOS")
+st.sidebar.caption("Enterprise Intelligence Platform")
 
 if "results" not in st.session_state:
     st.session_state.results = None
 
 
 # -------------------------
-# COMMAND CENTER 🔥
+# COMMAND CENTER
 # -------------------------
 if menu == "Command Center":
 
-    r = st.session_state.results
-
     st.markdown("# Command Center")
+
+    r = st.session_state.results
 
     if not r:
         st.warning("No data loaded")
     else:
         score = r["district_score"]
 
-        color = "#22C55E" if score > 80 else "#FACC15" if score > 60 else "#EF4444"
+        color_class = "green" if score > 80 else "yellow" if score > 60 else "red"
 
         st.markdown(f"""
-        <div class="metric-card">
-            <h1 style="color:{color}; font-size:48px;">{score}</h1>
-            <p>District Health Score</p>
+        <div class="card">
+            <div class="label">DISTRICT HEALTH</div>
+            <div class="kpi {color_class}">{score}</div>
         </div>
         """, unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns(3)
 
-        col1.metric("Stores", len(r["store_severity"]))
-        col2.metric("Patterns", len(r["patterns"]))
-        col3.metric("Alerts", len(r["alerts"]))
+        col1.markdown(f"""
+        <div class="card">
+            <div class="label">Stores</div>
+            <div class="kpi">{len(r["store_severity"])}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("---")
+        col2.markdown(f"""
+        <div class="card">
+            <div class="label">Patterns</div>
+            <div class="kpi">{len(r["patterns"])}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col3.markdown(f"""
+        <div class="card">
+            <div class="label">Alerts</div>
+            <div class="kpi">{len(r["alerts"])}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
         st.caption(r["summary"])
 
 
@@ -139,7 +165,7 @@ elif menu == "Intake":
 
 
 # -------------------------
-# OPERATIONS (PRIORITIES) 🔥
+# OPERATIONS (ELITE)
 # -------------------------
 elif menu == "Operations":
 
@@ -153,28 +179,36 @@ elif menu == "Operations":
             sev = r["store_severity"][s]
             impacts = r["impacts"].get(s, [])
 
-            color = "#EF4444" if sev > 75 else "#FACC15" if sev > 40 else "#22C55E"
+            color_class = "red" if sev > 75 else "yellow" if sev > 40 else "green"
 
             st.markdown(f"""
-            <div class="store-card">
-                <h3>Store {s}</h3>
-                <h2 style="color:{color}">{sev}</h2>
+            <div class="card">
+                <div class="label">STORE {s}</div>
+                <div class="kpi {color_class}">{sev}</div>
             """, unsafe_allow_html=True)
 
-            # IMPACTS
-            for i in impacts:
-                st.markdown(f"<p class='impact'>⚠ {i}</p>", unsafe_allow_html=True)
+            # Trend sparkline (mini chart)
+            trend = r.get("trend_memory", {}).get(s, [])
+            if trend:
+                df = pd.DataFrame(trend)
+                st.line_chart(df["severity"], height=100)
 
-            # ACTIONS
+            # Impacts
+            st.markdown("<div class='section-title'>Impact</div>", unsafe_allow_html=True)
+            for i in impacts:
+                st.warning(i)
+
+            # Actions
+            st.markdown("<div class='section-title'>Actions</div>", unsafe_allow_html=True)
             for a in r["actions"]:
                 if s in a:
-                    st.markdown(f"<p class='action'>✔ {a}</p>", unsafe_allow_html=True)
+                    st.success(a)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
 
 # -------------------------
-# INTELLIGENCE (PATTERNS)
+# INTELLIGENCE
 # -------------------------
 elif menu == "Intelligence":
 
@@ -185,16 +219,16 @@ elif menu == "Intelligence":
     if r:
         for p in r["patterns"]:
             st.markdown(f"""
-            <div class="store-card">
-                <h3>{p['metric'].upper()}</h3>
-                <p>{p['count']} stores affected</p>
-                <p>{", ".join(map(str, p['stores']))}</p>
+            <div class="card">
+                <div class="label">{p['metric'].upper()}</div>
+                <div class="kpi">{p['count']} stores</div>
+                <div class="label">{", ".join(map(str, p['stores']))}</div>
             </div>
             """, unsafe_allow_html=True)
 
 
 # -------------------------
-# ALERTS 🔥
+# ALERTS
 # -------------------------
 elif menu == "Alerts":
 
@@ -205,13 +239,13 @@ elif menu == "Alerts":
     if r:
         if r["alerts"]:
             for a in r["alerts"]:
-                st.markdown(f"<p class='alert'>⚠ {a}</p>", unsafe_allow_html=True)
+                st.error(a)
         else:
             st.success("No active alerts")
 
 
 # -------------------------
-# ASK AI 🔥
+# ASK AI (UPGRADED FEEL)
 # -------------------------
 elif menu == "Ask AI":
 
@@ -223,9 +257,11 @@ elif menu == "Ask AI":
         q = st.text_input("Ask a question")
 
         if q:
-            if "worst" in q:
-                st.markdown(f"Focus on Store {r['priority_stores'][0]}")
-            elif "fix" in q:
-                st.write(r["actions"][:3])
-            else:
-                st.write("Ask about priorities, risks, or performance")
+            with st.spinner("Thinking..."):
+                if "worst" in q.lower():
+                    st.markdown(f"### Focus on Store {r['priority_stores'][0]}")
+                elif "fix" in q.lower():
+                    for a in r["actions"][:3]:
+                        st.write(a)
+                else:
+                    st.write("Try: 'worst store' or 'what should I fix'")
