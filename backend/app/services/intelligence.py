@@ -1,100 +1,116 @@
-from collections import defaultdict
-from app.models.schemas import KPIRecord, IntelligenceOutput
+def generate_insights(records):
+    # -------------------------
+    # NO DATA CASE (IMPORTANT FIX)
+    # -------------------------
+    if not records:
+        return {
+            "summary": "No usable KPI data detected.",
+            "priority_stores": [],
+            "risks": [],
+            "actions": [],
+            "huddle": "No data available. Ensure reports are uploaded clearly.",
+            "vp_summary": "No KPI data was detected from the latest intake."
+        }
 
-def generate_intelligence(records: list[KPIRecord]) -> IntelligenceOutput:
+    # -------------------------
+    # CORE CALCULATIONS
+    # -------------------------
     off_track = [r for r in records if r.status == "off_track"]
-    needs_review = [r for r in records if r.status == "needs_review"]
-    by_store = defaultdict(list)
 
-    for r in records:
-        if r.store:
-            by_store[r.store].append(r)
+    store_map = {}
+    for r in off_track:
+        if not r.store:
+            continue
+        store_map.setdefault(r.store, []).append(r)
 
-    store_risk = sorted(
-        by_store.items(),
-        key=lambda kv: sum(1 for r in kv[1] if r.status in ["off_track", "needs_review"]),
+    # -------------------------
+    # PRIORITY STORES (SORTED)
+    # -------------------------
+    priority_stores = sorted(
+        store_map.items(),
+        key=lambda x: len(x[1]),
         reverse=True
     )
 
-    priority_stores = [s for s, _ in store_risk[:5]]
+    top_stores = [s[0] for s in priority_stores[:5]]
 
-    summary = [
-        f"{len(records)} cleaned KPI records created from messy intake.",
-        f"{len(off_track)} metrics are off track.",
-        f"{len(needs_review)} records need user review due to low confidence or missing target/actual.",
-    ]
-
+    # -------------------------
+    # RISKS
+    # -------------------------
     risks = []
+    for store, recs in priority_stores[:5]:
+        for r in recs:
+            if r.variance is not None:
+                risks.append(
+                    f"{store} - {r.metric} above target by {round(r.variance, 2)}"
+                )
+
+    # -------------------------
+    # ACTIONS
+    # -------------------------
+    actions = []
+
     if off_track:
-        risks.append("Execution risk: multiple KPIs are below target or trending unfavorable.")
-    if needs_review:
-        risks.append("Data quality risk: some extracted records need confirmation before being used for decisions.")
-    if priority_stores:
-        risks.append(f"Concentration risk: priority appears clustered in stores {', '.join(priority_stores)}.")
+        actions.append("Focus on highest variance stores first")
+        actions.append("Assign metric ownership at store level")
+        actions.append("Execute 24-hour corrective action plans")
+        actions.append("Follow up within same business day")
+    else:
+        actions.append("All metrics currently on track — maintain execution discipline")
 
-    root_causes = [
-        "Potential inconsistent process execution.",
-        "Possible labor deployment mismatch against operational workload.",
-        "Potential reporting fragmentation causing delayed response.",
-    ]
+    # -------------------------
+    # SUMMARY
+    # -------------------------
+    summary = f"{len(off_track)} metrics off track across {len(records)} total records."
 
-    actions = [
-        "Validate low-confidence records before saving to history.",
-        "Focus first on the stores with the highest count of off-track metrics.",
-        "Create a 24-hour action plan for each priority store.",
-        "Use huddles to assign metric ownership and same-day follow-up.",
-    ]
+    # -------------------------
+    # HUDDLE SCRIPT
+    # -------------------------
+    if off_track:
+        huddle = f"""
+Team, today we are focusing on execution gaps.
 
-    vp_email = build_vp_email(summary, priority_stores, risks, actions)
-    huddle = build_huddle(priority_stores, actions)
-
-    return IntelligenceOutput(
-        district_health_summary=summary,
-        highest_priority_stores=priority_stores,
-        risks=risks,
-        likely_root_causes=root_causes,
-        suggested_actions=actions,
-        vp_email_draft=vp_email,
-        huddle_script=huddle,
-        cleaned_records=records
-    )
-
-def build_vp_email(summary, priority_stores, risks, actions):
-    return f"""Subject: DistrictOS Operational Readout
-
-High-level summary:
-- {summary[0]}
-- {summary[1]}
-- {summary[2]}
+We have {len(off_track)} metrics off track.
 
 Priority stores:
-- {', '.join(priority_stores) if priority_stores else 'No store-level concentration detected yet'}
+{', '.join(top_stores) if top_stores else "None identified"}
 
-Primary risks:
-- {'; '.join(risks) if risks else 'No major risks detected'}
+Focus:
+- Close gaps on highest variance metrics
+- Assign ownership
+- Same-day follow-up
+"""
+    else:
+        huddle = "Great job team — all metrics are currently on track. Stay consistent."
 
-Next actions:
-- {actions[0]}
-- {actions[1]}
-- {actions[2]}
+    # -------------------------
+    # VP SUMMARY
+    # -------------------------
+    vp_summary = f"""
+District Operational Readout:
 
-I will validate low-confidence data points and focus follow-up on the highest-risk stores first.
+- {len(records)} KPI records analyzed
+- {len(off_track)} metrics off track
+
+Top priority stores:
+{', '.join(top_stores) if top_stores else "None"}
+
+Primary risk:
+Execution inconsistency across identified locations
+
+Next steps:
+- Target highest variance stores
+- Deploy corrective actions within 24 hours
 """
 
-def build_huddle(priority_stores, actions):
-    return f"""Team Huddle Script
-
-Today’s focus:
-We are going to use the data to identify where execution needs immediate support.
-
-Priority stores:
-{chr(10).join('- ' + s for s in priority_stores) if priority_stores else '- No specific store priority yet'}
-
-Leader actions:
-- {actions[1]}
-- {actions[2]}
-- {actions[3]}
-
-Close:
-Each leader owns one metric, one action, and one same-day follow-up.
-"""
+    # -------------------------
+    # FINAL OUTPUT
+    # -------------------------
+    return {
+        "summary": summary,
+        "priority_stores": top_stores,
+        "risks": risks,
+        "actions": actions,
+        "huddle": huddle.strip(),
+        "vp_summary": vp_summary.strip()
+    }
