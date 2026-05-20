@@ -17,9 +17,18 @@ async def analyze_text(data: Dict):
 
     # 🔥 PARSE → NORMALIZE
     records = parse_text_to_records(text)
-    results = normalize_records(records)
+    from app.services.ai import generate_ai_insights
 
-    return results
+records = parse_text_to_records(text)
+records = normalize_records(records)
+
+# 🔥 REAL AI
+ai_summary = generate_ai_insights(text)
+
+results = normalize_records(records)
+results["summary"] = ai_summary
+
+return results
 
 
 # -------------------------
