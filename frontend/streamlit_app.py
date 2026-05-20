@@ -115,62 +115,53 @@ elif menu == "Priorities":
         st.warning("No data yet.")
     else:
         stores = results.get("priority_stores", [])
-        actions = results.get("actions", [])
+        store_metrics = results.get("store_metrics", {})
 
         if not stores:
             st.success("No critical stores")
         else:
             for store in stores:
+                metrics = store_metrics.get(store, [])
+
                 with st.container():
                     st.markdown(f"## 🔴 Store {store}")
 
-                    col1, col2, col3 = st.columns(3)
+                    cols = st.columns(len(metrics) if metrics else 1)
 
-                    # --- METRICS (simulated extraction from actions text)
-                    labor_issue = [a for a in actions if "labor" in a.lower() and store in a]
-                    sales_issue = [a for a in actions if "sales" in a.lower() and store in a]
+                    # --- METRICS DISPLAY
+                    for i, m in enumerate(metrics):
+                        with cols[i]:
+                            variance = round(m["variance"], 2) if m["variance"] else 0
 
-                    with col1:
-                        st.metric(
-                            "Labor",
-                            "Off Track" if labor_issue else "OK"
-                        )
+                            st.metric(
+                                m["metric"].upper(),
+                                f"{m['actual']}",
+                                f"{variance}"
+                            )
 
-                    with col2:
-                        st.metric(
-                            "Sales",
-                            "Off Track" if sales_issue else "OK"
-                        )
-
-                    with col3:
-                        severity = "HIGH" if labor_issue or sales_issue else "MED"
-                        st.metric("Severity", severity)
-
-                    # --- WHY SECTION
+                    # --- WHY
                     st.markdown("### 🧠 Why This Store is Flagged")
 
-                    if labor_issue:
-                        st.error("Labor above target → margin risk")
+                    for m in metrics:
+                        if m["status"] == "off_track":
+                            st.error(
+                                f"{m['metric'].upper()} off track "
+                                f"(Actual: {m['actual']} vs Target: {m['target']})"
+                            )
 
-                    if sales_issue:
-                        st.error("Sales below plan → revenue risk")
+                    # --- ACTIONS
+                    st.markdown("### ✅ Actions")
 
-                    if not labor_issue and not sales_issue:
-                        st.warning("General KPI variance detected")
-
-                    # --- ACTIONS FOR THIS STORE
-                    st.markdown("### ✅ Recommended Actions")
-
+                    actions = results.get("actions", [])
                     store_actions = [a for a in actions if store in a]
 
                     if store_actions:
                         for a in store_actions:
                             st.success(a)
                     else:
-                        st.info("No specific actions generated")
+                        st.info("No specific actions")
 
                     st.markdown("---")
-
 
 # -------------------------
 # RISKS
