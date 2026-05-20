@@ -1,215 +1,87 @@
 import streamlit as st
 import requests
-import pandas as pd
-import time
 
 API = "https://districtos.onrender.com/api"
 
 st.set_page_config(layout="wide")
 
 # -------------------------
-# ROLE-BASED VIEW 🔥
+# SESSION
 # -------------------------
-role = st.sidebar.selectbox("View Mode", ["Executive", "Operator"])
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 menu = st.sidebar.radio("", [
-    "Command Center",
-    "Intake",
-    "Operations",
-    "Intelligence",
-    "Alerts",
-    "Ask AI"
+    "Dashboard",
+    "Upload",
+    "Ask AI",
+    "History"
 ])
 
 st.sidebar.markdown("## DistrictOS")
-st.sidebar.caption("Enterprise Intelligence Platform")
-
-if "results" not in st.session_state:
-    st.session_state.results = None
-
-if "selected_store" not in st.session_state:
-    st.session_state.selected_store = None
-
-# -------------------------
-# GLOBAL STYLE
-# -------------------------
-st.markdown("""
-<style>
-.card {
-    background: #111827;
-    padding: 18px;
-    border-radius: 14px;
-    border: 1px solid #1F2937;
-    margin-bottom: 15px;
-}
-.kpi {
-    font-size: 32px;
-    font-weight: bold;
-}
-.label {
-    font-size: 12px;
-    color: #9CA3AF;
-}
-</style>
-""", unsafe_allow_html=True)
+st.sidebar.caption("Enterprise Platform")
 
 
 # -------------------------
-# COMMAND CENTER
+# DASHBOARD
 # -------------------------
-if menu == "Command Center":
+if menu == "Dashboard":
 
-    st.title("Command Center")
-    r = st.session_state.results
+    st.title("District Overview")
 
-    if not r:
-        st.warning("No data")
+    if st.session_state.history:
+        data = st.session_state.history[-1]
+
+        st.metric("District Score", data["district_score"])
+        st.write(data["summary"])
+
+        for s in data["priority_stores"]:
+            st.write(f"Store {s}: {data['store_severity'][s]}")
     else:
-        score = r["district_score"]
-
-        color = "green" if score > 80 else "orange" if score > 60 else "red"
-
-        # 🔥 Animated feel
-        display = st.empty()
-        for i in range(0, score + 1, max(1, score // 20)):
-            display.markdown(f"## {i}")
-            time.sleep(0.01)
-        display.markdown(f"## :{color}[{score}]")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Stores", len(r["store_severity"]),
-                    help="Total stores analyzed")
-
-        col2.metric("Patterns", len(r["patterns"]),
-                    help="Cross-store issues detected")
-
-        col3.metric("Alerts", len(r["alerts"]),
-                    help="Stores worsening over time")
-
-        st.caption(r["summary"])
+        st.warning("No data")
 
 
 # -------------------------
-# INTAKE
+# UPLOAD
 # -------------------------
-elif menu == "Intake":
+elif menu == "Upload":
 
     f = st.file_uploader("Upload")
-    t = st.text_area("Paste")
 
-    if st.button("Analyze"):
-        if f:
-            res = requests.post(f"{API}/analyze/upload",
-                                files={"file": (f.name, f.getvalue())})
-        else:
-            res = requests.post(f"{API}/analyze/text",
-                                json={"text": t})
+    if st.button("Analyze") and f:
 
-        if res.status_code == 200:
-            st.session_state.results = res.json()
-
-
-# -------------------------
-# OPERATIONS (DRILLDOWN)
-# -------------------------
-elif menu == "Operations":
-
-    r = st.session_state.results
-
-    if r:
-
-        # STORE SELECTOR 🔥
-        selected = st.selectbox(
-            "Select Store",
-            r["priority_stores"],
-            index=0 if not st.session_state.selected_store else
-            r["priority_stores"].index(st.session_state.selected_store)
+        res = requests.post(
+            f"{API}/analyze/upload",
+            files={"file": (f.name, f.getvalue())}
         )
 
-        st.session_state.selected_store = selected
-
-        sev = r["store_severity"][selected]
-        impacts = r["impacts"].get(selected, [])
-        metrics = r["store_metrics"].get(selected, [])
-
-        st.markdown(f"## Store {selected} | Severity: {sev}")
-
-        # 🔥 KPI TOOLTIPS
-        cols = st.columns(len(metrics)) if metrics else [st]
-
-        for i, m in enumerate(metrics):
-            with cols[i]:
-                st.metric(
-                    m["metric"],
-                    m["actual"],
-                    round(m["variance"], 2) if m["variance"] else 0,
-                    help=f"Target: {m['target']} | Status: {m['status']}"
-                )
-
-        # Trend chart
-        trend = r.get("trend_memory", {}).get(selected, [])
-        if trend:
-            df = pd.DataFrame(trend)
-            st.line_chart(df["severity"])
-
-        # Impact
-        st.markdown("### Impact")
-        for i in impacts:
-            st.warning(i)
-
-        # Actions
-        st.markdown("### Actions")
-        for a in r["actions"]:
-            if selected in a:
-                st.success(a)
+        if res.status_code == 200:
+            data = res.json()
+            st.session_state.history.append(data)
+            st.success("Saved")
 
 
 # -------------------------
-# INTELLIGENCE
-# -------------------------
-elif menu == "Intelligence":
-
-    r = st.session_state.results
-
-    if r:
-        for p in r["patterns"]:
-            with st.expander(f"{p['metric']} ({p['count']} stores)"):
-                st.write(", ".join(map(str, p["stores"])))
-
-
-# -------------------------
-# ALERTS
-# -------------------------
-elif menu == "Alerts":
-
-    r = st.session_state.results
-
-    if r:
-        if r["alerts"]:
-            for a in r["alerts"]:
-                st.error(a)
-        else:
-            st.success("No alerts")
-
-
-# -------------------------
-# ASK AI
+# ASK AI (REAL AI)
 # -------------------------
 elif menu == "Ask AI":
 
-    r = st.session_state.results
+    q = st.text_input("Ask anything about your district")
 
-    if r:
-        q = st.text_input("Ask DistrictOS")
+    if q:
+        res = requests.post(f"{API}/ask", json={"question": q})
 
-        if q:
-            with st.spinner("Thinking..."):
-                if "worst" in q:
-                    st.write(f"Focus on store {r['priority_stores'][0]}")
-                elif "fix" in q:
-                    st.write(r["actions"][:3])
-                elif "trend" in q:
-                    st.write("Some stores are worsening over time")
-                else:
-                    st.write("Try asking about risks, trends, or priorities")
+        if res.status_code == 200:
+            st.write(res.json()["response"])
+
+
+# -------------------------
+# HISTORY
+# -------------------------
+elif menu == "History":
+
+    st.title("Past Analyses")
+
+    for i, h in enumerate(st.session_state.history):
+        with st.expander(f"Run {i+1}"):
+            st.write(h["summary"])
