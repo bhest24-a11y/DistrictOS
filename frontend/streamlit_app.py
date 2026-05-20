@@ -6,20 +6,15 @@ st.set_page_config(layout="wide", page_title="DistrictOS")
 API = "https://districtos.onrender.com/api"
 
 # -------------------------
-# SIDEBAR NAV
+# SIDEBAR
 # -------------------------
 menu = st.sidebar.radio("DistrictOS", [
     "Command Center",
     "Intake",
     "Priorities",
     "Risks",
-    "Actions",
-    "VP Brief",
-    "Huddle"
+    "Actions"
 ])
-
-st.sidebar.markdown("---")
-st.sidebar.caption("AI District Operating System")
 
 if "results" not in st.session_state:
     st.session_state.results = None
@@ -34,7 +29,7 @@ if menu == "Command Center":
     results = st.session_state.results
 
     if not results:
-        st.warning("No data yet. Go to Intake.")
+        st.warning("No data yet.")
     else:
         col1, col2, col3 = st.columns(3)
 
@@ -44,12 +39,10 @@ if menu == "Command Center":
 
         st.markdown("---")
 
-        st.subheader("🔥 Top Priorities")
         for s in results.get("priority_stores", [])[:5]:
             st.error(f"Store {s}")
 
         st.markdown("---")
-        st.subheader("🧠 AI Summary")
         st.info(results.get("summary", ""))
 
 
@@ -57,18 +50,12 @@ if menu == "Command Center":
 # INTAKE
 # -------------------------
 elif menu == "Intake":
-    st.header("📥 Data Intake")
+    st.header("Upload Data")
 
-    uploaded_file = st.file_uploader(
-        "Upload file",
-        type=["csv", "xlsx", "xls", "png", "jpg", "jpeg", "mp4", "mov", "avi", "mkv"]
-    )
-
-    text_input = st.text_area("Or paste report text")
+    uploaded_file = st.file_uploader("Upload file")
+    text_input = st.text_area("Or paste text")
 
     if st.button("Analyze"):
-        response = None
-
         if uploaded_file:
             files = {
                 "file": (
@@ -78,33 +65,24 @@ elif menu == "Intake":
                 )
             }
 
-            response = requests.post(
-                f"{API}/analyze/upload",
-                files=files,
-                timeout=120
-            )
+            res = requests.post(f"{API}/analyze/upload", files=files)
 
         elif text_input:
-            response = requests.post(
-                f"{API}/analyze/text",
-                json={"text": text_input},
-                timeout=120
-            )
+            res = requests.post(f"{API}/analyze/text", json={"text": text_input})
 
         else:
-            st.warning("Upload a file or paste text.")
+            st.warning("Upload or paste something")
             st.stop()
 
-        if response.status_code == 200:
-            st.session_state.results = response.json()
-            st.success("Analysis complete")
+        if res.status_code == 200:
+            st.session_state.results = res.json()
+            st.success("Done")
         else:
-            st.error(f"Error: {response.status_code}")
-            st.text(response.text)
+            st.error(res.text)
 
 
 # -------------------------
-# 🔥 PRIORITIES V2 (REAL CARDS)
+# 🔥 PRIORITIES (FINAL VERSION)
 # -------------------------
 elif menu == "Priorities":
     st.header("🔥 Priority Stores")
@@ -115,53 +93,57 @@ elif menu == "Priorities":
         st.warning("No data yet.")
     else:
         stores = results.get("priority_stores", [])
-        store_metrics = results.get("store_metrics", {})
+        metrics_data = results.get("store_metrics", {})
+        severity_data = results.get("store_severity", {})
+        actions = results.get("actions", [])
 
-        if not stores:
-            st.success("No critical stores")
-        else:
-            for store in stores:
-                metrics = store_metrics.get(store, [])
+        for store in stores:
+            metrics = metrics_data.get(store, [])
+            severity = severity_data.get(store, 0)
 
-                with st.container():
-                    st.markdown(f"## 🔴 Store {store}")
+            # COLOR
+            if severity > 75:
+                color = "🔴"
+            elif severity > 40:
+                color = "🟡"
+            else:
+                color = "🟢"
 
-                    cols = st.columns(len(metrics) if metrics else 1)
+            with st.container():
+                st.markdown(f"## {color} Store {store}")
+                st.metric("Severity Score", severity)
 
-                    # --- METRICS DISPLAY
-                    for i, m in enumerate(metrics):
-                        with cols[i]:
-                            variance = round(m["variance"], 2) if m["variance"] else 0
+                cols = st.columns(len(metrics) if metrics else 1)
 
-                            st.metric(
-                                m["metric"].upper(),
-                                f"{m['actual']}",
-                                f"{variance}"
-                            )
+                # METRICS
+                for i, m in enumerate(metrics):
+                    with cols[i]:
+                        variance = round(m["variance"], 2) if m["variance"] else 0
 
-                    # --- WHY
-                    st.markdown("### 🧠 Why This Store is Flagged")
+                        st.metric(
+                            m["metric"].upper(),
+                            f"{m['actual']}",
+                            f"{variance}"
+                        )
 
-                    for m in metrics:
-                        if m["status"] == "off_track":
-                            st.error(
-                                f"{m['metric'].upper()} off track "
-                                f"(Actual: {m['actual']} vs Target: {m['target']})"
-                            )
+                # WHY
+                st.markdown("### 🧠 Why")
+                for m in metrics:
+                    if m["status"] == "off_track":
+                        st.error(
+                            f"{m['metric']} off track "
+                            f"({m['actual']} vs {m['target']})"
+                        )
 
-                    # --- ACTIONS
-                    st.markdown("### ✅ Actions")
+                # ACTIONS
+                st.markdown("### ✅ Actions")
+                store_actions = [a for a in actions if store in a]
 
-                    actions = results.get("actions", [])
-                    store_actions = [a for a in actions if store in a]
+                for a in store_actions:
+                    st.success(a)
 
-                    if store_actions:
-                        for a in store_actions:
-                            st.success(a)
-                    else:
-                        st.info("No specific actions")
+                st.markdown("---")
 
-                    st.markdown("---")
 
 # -------------------------
 # RISKS
@@ -171,11 +153,9 @@ elif menu == "Risks":
 
     results = st.session_state.results
 
-    if not results:
-        st.warning("No data yet.")
-    else:
+    if results:
         for r in results.get("risks", []):
-            st.warning(f"⚠️ {r}")
+            st.warning(r)
 
 
 # -------------------------
@@ -186,36 +166,6 @@ elif menu == "Actions":
 
     results = st.session_state.results
 
-    if not results:
-        st.warning("No data yet.")
-    else:
+    if results:
         for a in results.get("actions", []):
-            st.success(f"✅ {a}")
-
-
-# -------------------------
-# VP BRIEF
-# -------------------------
-elif menu == "VP Brief":
-    st.header("👔 VP Brief")
-
-    results = st.session_state.results
-
-    if not results:
-        st.warning("No data yet.")
-    else:
-        st.code(results.get("vp_summary", ""), language="markdown")
-
-
-# -------------------------
-# HUDDLE
-# -------------------------
-elif menu == "Huddle":
-    st.header("🗣 Huddle")
-
-    results = st.session_state.results
-
-    if not results:
-        st.warning("No data yet.")
-    else:
-        st.code(results.get("huddle", ""), language="markdown")
+            st.success(a)
