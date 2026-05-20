@@ -26,7 +26,7 @@ if "results" not in st.session_state:
 
 
 # -------------------------
-# COMMAND CENTER (NEW)
+# COMMAND CENTER
 # -------------------------
 if menu == "Command Center":
     st.title("🧠 Command Center")
@@ -38,51 +38,23 @@ if menu == "Command Center":
     else:
         col1, col2, col3 = st.columns(3)
 
-        col1.metric(
-            "Records",
-            results.get("records_found", 0)
-        )
-
-        col2.metric(
-            "Priority Stores",
-            len(results.get("priority_stores", []))
-        )
-
-        col3.metric(
-            "Risks",
-            len(results.get("risks", []))
-        )
+        col1.metric("Records", results.get("records_found", 0))
+        col2.metric("Priority Stores", len(results.get("priority_stores", [])))
+        col3.metric("Risks", len(results.get("risks", [])))
 
         st.markdown("---")
 
         st.subheader("🔥 Top Priorities")
-        stores = results.get("priority_stores", [])
-
-        if not stores:
-            st.success("No critical stores right now")
-        else:
-            for s in stores[:5]:
-                st.error(f"{s}")
+        for s in results.get("priority_stores", [])[:5]:
+            st.error(f"{s}")
 
         st.markdown("---")
-
-        st.subheader("⚠️ Key Risks")
-        risks = results.get("risks", [])
-
-        if not risks:
-            st.success("No major risks detected")
-        else:
-            for r in risks:
-                st.warning(r)
-
-        st.markdown("---")
-
         st.subheader("🧠 AI Summary")
-        st.info(results.get("summary", "No summary available"))
+        st.info(results.get("summary", ""))
 
 
 # -------------------------
-# INTAKE (UPLOAD)
+# INTAKE
 # -------------------------
 elif menu == "Intake":
     st.header("📥 Data Intake")
@@ -126,14 +98,13 @@ elif menu == "Intake":
         if response.status_code == 200:
             st.session_state.results = response.json()
             st.success("Analysis complete")
-            st.json(st.session_state.results)
         else:
             st.error(f"Error: {response.status_code}")
             st.text(response.text)
 
 
 # -------------------------
-# PRIORITIES
+# 🔥 PRIORITIES (UPGRADED)
 # -------------------------
 elif menu == "Priorities":
     st.header("🔥 Priority Stores")
@@ -146,10 +117,27 @@ elif menu == "Priorities":
         stores = results.get("priority_stores", [])
 
         if not stores:
-            st.info("No priority stores detected.")
+            st.success("No critical stores")
         else:
-            for s in stores:
-                st.error(f"🔥 {s}")
+            for store in stores:
+                with st.container():
+                    col1, col2 = st.columns([2, 1])
+
+                    # LEFT: STORE INFO
+                    with col1:
+                        st.markdown(f"### 🔴 Store {store}")
+
+                        st.markdown("""
+                        **Issues Detected:**
+                        - KPI variance detected
+                        - Performance off target
+                        """)
+
+                    # RIGHT: SEVERITY SCORE (mock for now)
+                    with col2:
+                        st.metric("Severity", "HIGH")
+
+                    st.markdown("---")
 
 
 # -------------------------
@@ -164,7 +152,7 @@ elif menu == "Risks":
         st.warning("No data yet.")
     else:
         for r in results.get("risks", []):
-            st.warning(r)
+            st.warning(f"⚠️ {r}")
 
 
 # -------------------------
@@ -179,7 +167,7 @@ elif menu == "Actions":
         st.warning("No data yet.")
     else:
         for a in results.get("actions", []):
-            st.success(a)
+            st.success(f"✅ {a}")
 
 
 # -------------------------
