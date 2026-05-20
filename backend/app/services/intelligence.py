@@ -1,10 +1,6 @@
 from collections import defaultdict
 
 
-# -------------------------
-# MAIN ENTRY
-# -------------------------
-
 def generate_insights(records):
 
     if not records:
@@ -18,15 +14,22 @@ def generate_insights(records):
     total_off_track = 0
 
     # -------------------------
-    # SCORE STORES
+    # SCORE + GROUP METRICS
     # -------------------------
     for r in records:
+        store_metrics[r.store].append({
+            "metric": r.metric,
+            "actual": r.actual,
+            "target": r.target,
+            "variance": r.variance,
+            "status": r.status
+        })
+
         if r.status == "off_track":
             total_off_track += 1
 
             impact = abs(r.variance or 0)
 
-            # Weight metrics differently
             if r.metric == "sales":
                 score = impact * 2
             elif r.metric == "labor":
@@ -35,7 +38,6 @@ def generate_insights(records):
                 score = impact
 
             store_scores[r.store] += score
-            store_metrics[r.store].append(r)
 
     # -------------------------
     # PRIORITY STORES
@@ -49,7 +51,7 @@ def generate_insights(records):
     priority_stores = [s[0] for s in sorted_stores if s[0]][:5]
 
     # -------------------------
-    # RISK DETECTION
+    # RISKS
     # -------------------------
     metric_counts = defaultdict(int)
 
@@ -59,95 +61,52 @@ def generate_insights(records):
 
     for metric, count in metric_counts.items():
         if count >= 3:
-            risks.append(
-                f"{metric.upper()} issues detected across {count} records"
-            )
+            risks.append(f"{metric.upper()} issues across {count} records")
 
     # -------------------------
-    # ACTION GENERATION
+    # ACTIONS
     # -------------------------
     for store in priority_stores:
-        metrics = store_metrics[store]
+        for r in store_metrics[store]:
+            if r["status"] != "off_track":
+                continue
 
-        for m in metrics:
-            if m.metric == "labor":
+            if r["metric"] == "labor":
                 actions.append(
-                    f"Reduce labor in store {store} (variance {round(m.variance,2)})"
-                )
-            elif m.metric == "sales":
-                actions.append(
-                    f"Drive sales recovery in store {store} (gap {round(m.variance,2)})"
-                )
-            elif m.metric == "shrink":
-                actions.append(
-                    f"Investigate shrink in store {store}"
+                    f"Reduce labor in store {store} (variance {round(r['variance'],2)})"
                 )
 
-    # Deduplicate actions
-    actions = list(set(actions))[:5]
+            elif r["metric"] == "sales":
+                actions.append(
+                    f"Drive sales recovery in store {store} (gap {round(r['variance'],2)})"
+                )
+
+    actions = list(set(actions))[:6]
 
     # -------------------------
     # SUMMARY
     # -------------------------
-    summary = (
-        f"{total_off_track} metrics off track across {len(records)} total records."
-    )
+    summary = f"{total_off_track} metrics off track across {len(records)} records."
 
     # -------------------------
-    # VP SUMMARY
+    # RETURN (NEW STRUCTURE)
     # -------------------------
-    vp_summary = f"""
-District Operational Readout:
-
-- {len(records)} KPI records analyzed
-- {total_off_track} metrics off track
-
-Top priority stores:
-{', '.join(priority_stores) if priority_stores else 'None'}
-
-Primary risks:
-{', '.join(risks) if risks else 'No major risks'}
-
-Action Plan:
-{chr(10).join(['- ' + a for a in actions]) if actions else '- Maintain execution'}
-"""
-
-    # -------------------------
-    # HUDDLE
-    # -------------------------
-    if total_off_track == 0:
-        huddle = "Team, great job — all metrics are on track. Stay consistent."
-    else:
-        huddle = f"""
-Team, quick focus:
-
-We have {total_off_track} metrics off track.
-
-Priority stores: {', '.join(priority_stores)}
-
-Focus on execution, especially in key problem areas.
-"""
-
     return {
         "summary": summary,
         "priority_stores": priority_stores,
+        "store_metrics": dict(store_metrics),  # 🔥 NEW
         "risks": risks,
         "actions": actions,
-        "vp_summary": vp_summary.strip(),
-        "huddle": huddle.strip()
+        "records_found": len(records)
     }
 
-
-# -------------------------
-# EMPTY RESPONSE
-# -------------------------
 
 def empty_response():
     return {
         "summary": "No valid data detected.",
         "priority_stores": [],
+        "store_metrics": {},
         "risks": [],
         "actions": [],
-        "vp_summary": "No data available.",
-        "huddle": "No data available."
+        "records_found": 0
     }
