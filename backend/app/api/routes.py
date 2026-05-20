@@ -1,50 +1,108 @@
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File
 from pathlib import Path
 import shutil
-from app.services.capture import save_upload, extract_frames_from_video
-from app.services.redaction import redact_image_text_regions
-from app.services.parsers import parse_excel_or_csv, parse_image, parse_text_blob
-from app.services.intelligence import generate_intelligence
-from app.services.storage import save_records, save_summary
-from app.core.config import RAW_DIR, FRAME_DIR
+
+# NEW SERVICES
+from app.services.parsers import parse_file, parse_text_blob
+from app.services.ocr import extract_text_from_image, extract_text_from_images
+from app.services.video import extract_video_frames
+from app.services.intelligence import generate_insights
+
+# CONFIG
+UPLOAD_DIR = Path("data/uploads")
+FRAME_DIR = Path("data/frames")
+
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+FRAME_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter()
 
+
+# -------------------------
+# FILE UPLOAD ENDPOINT
+# -------------------------
 @router.post("/analyze/upload")
-async def analyze_upload(files: list[UploadFile] = File(...)):
-    all_records = []
+async def analyze_upload(file: UploadFile = File(...)):
 
-    for f in files:
-        saved = save_upload(f.file, f.filename)
-        ext = saved.suffix.lower()
+    file_path = UPLOAD_DIR / file.filename
 
-        if ext in [".xlsx", ".xls", ".csv"]:
-            all_records.extend(parse_excel_or_csv(saved))
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-        elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
-            redacted = FRAME_DIR / f"redacted_{saved.name}.png"
-            redact_image_text_regions(str(saved), str(redacted))
-            all_records.extend(parse_image(redacted))
+    ext = file_path.suffix.lower()
 
-        elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
-            frames = extract_frames_from_video(saved)
-            for frame in frames:
-                redacted = FRAME_DIR / f"redacted_{frame.name}"
-                redact_image_text_regions(str(frame), str(redacted))
-                all_records.extend(parse_image(redacted))
+    records = []
+    extracted_text = ""
 
-        else:
-            all_records.append(parse_text_blob(f"Unsupported file type: {saved.name}", source=saved.name)[0])
+    # -------------------------
+    # CSV / EXCEL
+    # -------------------------
+    if ext in [".csv", ".xlsx", ".xls"]:
+        records = parse_file(file_path)
 
-    output = generate_intelligence(all_records)
-    save_records(output.cleaned_records)
-    save_summary(output)
-    return output
+    # -------------------------
+    # IMAGE → OCR
+    # -------------------------
+    elif ext in [".png", ".jpg", ".jpeg"]:
+        ocr_result = extract_text_from_image(file_path)
 
+        extracted_text = ocr_result.get("text", "")
+        records = parse_text_blob(extracted_text)
+
+    # -------------------------
+    # VIDEO → FRAMES → OCR
+    # -------------------------
+    elif ext in [".mp4", ".mov", ".avi", ".mkv"]:
+        frames = extract_video_frames(file_path, FRAME_DIR)
+
+        ocr_result = extract_text_from_images(frames)
+
+        extracted_text = ocr_result.get("text", "")
+        records = parse_text_blob(extracted_text)
+
+    # -------------------------
+    # FALLBACK
+    # -------------------------
+    else:
+        return {
+            "error": "Unsupported file type"
+        }
+
+    # -------------------------
+    # INTELLIGENCE
+    # -------------------------
+    insights = generate_insights(records)
+
+    return {
+        "summary": insights["summary"],
+        "priority_stores": insights["priority_stores"],
+        "risks": insights["risks"],
+        "actions": insights["actions"],
+        "vp_summary": insights["vp_summary"],
+        "huddle": insights["huddle"],
+        "records_found": len(records),
+        "raw_text_preview": extracted_text[:500] if extracted_text else None
+    }
+
+
+# -------------------------
+# TEXT INPUT ENDPOINT
+# -------------------------
 @router.post("/analyze/text")
-async def analyze_text(text: str = Form(...)):
+async def analyze_text(payload: dict):
+
+    text = payload.get("text", "")
+
     records = parse_text_blob(text)
-    output = generate_intelligence(records)
-    save_records(output.cleaned_records)
-    save_summary(output)
-    return output
+    insights = generate_insights(records)
+
+    return {
+        "summary": insights["summary"],
+        "priority_stores": insights["priority_stores"],
+        "risks": insights["risks"],
+        "actions": insights["actions"],
+        "vp_summary": insights["vp_summary"],
+        "huddle": insights["huddle"],
+        "records_found": len(records)
+    }
