@@ -13,6 +13,7 @@ def generate_insights(records):
     risks = []
     actions = []
     patterns = []
+    impacts = defaultdict(list)  # 🔥 NEW
 
     total_off_track = 0
 
@@ -32,7 +33,7 @@ def generate_insights(records):
         if r.status == "off_track":
             total_off_track += 1
 
-            # % deviation scoring
+            # % deviation
             if r.target and r.target != 0:
                 pct_diff = abs((r.actual - r.target) / r.target)
             else:
@@ -48,6 +49,29 @@ def generate_insights(records):
 
             score = pct_diff * 100 * weight
             store_scores[r.store] += score
+
+            # -------------------------
+            # 🔥 WHY THIS MATTERS (IMPACT)
+            # -------------------------
+            if r.metric == "sales":
+                impacts[r.store].append(
+                    f"Revenue risk: sales below target by {round(r.variance,2)}"
+                )
+
+            elif r.metric == "labor":
+                impacts[r.store].append(
+                    f"Margin risk: labor above plan by {round(r.variance,2)}"
+                )
+
+            elif r.metric == "shrink":
+                impacts[r.store].append(
+                    f"Profit risk: shrink impacting inventory control"
+                )
+
+            else:
+                impacts[r.store].append(
+                    f"Operational risk in {r.metric}"
+                )
 
     # -------------------------
     # NORMALIZE SEVERITY
@@ -69,35 +93,24 @@ def generate_insights(records):
     priority_stores = [s[0] for s in sorted_stores][:5]
 
     # -------------------------
-    # 🔥 PATTERN DETECTION
+    # PATTERN DETECTION
     # -------------------------
     metric_store_map = defaultdict(set)
-    metric_variance = defaultdict(list)
 
     for r in records:
         if r.status == "off_track":
             metric_store_map[r.metric].add(r.store)
 
-            if r.variance:
-                metric_variance[r.metric].append(abs(r.variance))
-
     for metric, stores in metric_store_map.items():
         if len(stores) >= 3:
-            avg_impact = (
-                sum(metric_variance[metric]) / len(metric_variance[metric])
-                if metric_variance[metric] else 0
-            )
-
             patterns.append({
                 "metric": metric,
                 "stores": list(stores),
-                "count": len(stores),
-                "avg_impact": round(avg_impact, 2)
+                "count": len(stores)
             })
 
             risks.append(
-                f"{metric.upper()} trending across {len(stores)} stores "
-                f"(avg variance {round(avg_impact,2)})"
+                f"{metric.upper()} trending across {len(stores)} stores"
             )
 
     # -------------------------
@@ -110,12 +123,12 @@ def generate_insights(records):
 
             if m["metric"] == "labor":
                 actions.append(
-                    f"Reduce labor in store {store} (variance {round(m['variance'],2)})"
+                    f"Reduce labor in store {store}"
                 )
 
             elif m["metric"] == "sales":
                 actions.append(
-                    f"Drive sales recovery in store {store} (gap {round(m['variance'],2)})"
+                    f"Drive sales recovery in store {store}"
                 )
 
             elif m["metric"] == "shrink":
@@ -129,8 +142,7 @@ def generate_insights(records):
     # SUMMARY
     # -------------------------
     summary = (
-        f"{total_off_track} metrics off track across {len(records)} records. "
-        f"{len(patterns)} cross-store patterns detected."
+        f"{total_off_track} metrics off track across {len(records)} records."
     )
 
     return {
@@ -138,7 +150,8 @@ def generate_insights(records):
         "priority_stores": priority_stores,
         "store_metrics": dict(store_metrics),
         "store_severity": store_severity,
-        "patterns": patterns,  # 🔥 NEW
+        "patterns": patterns,
+        "impacts": dict(impacts),  # 🔥 NEW
         "risks": risks,
         "actions": actions,
         "records_found": len(records)
@@ -152,6 +165,7 @@ def empty_response():
         "store_metrics": {},
         "store_severity": {},
         "patterns": [],
+        "impacts": {},
         "risks": [],
         "actions": [],
         "records_found": 0
