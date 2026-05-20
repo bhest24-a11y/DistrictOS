@@ -1,17 +1,17 @@
 import streamlit as st
 import requests
 
-st.set_page_config(layout="wide", page_title="DistrictOS")
-
 API = "https://districtos.onrender.com/api"
+
+st.set_page_config(layout="wide")
 
 menu = st.sidebar.radio("DistrictOS", [
     "Command Center",
     "Intake",
     "Priorities",
     "Patterns",
-    "Risks",
-    "Actions"
+    "Alerts",
+    "Ask AI"
 ])
 
 if "results" not in st.session_state:
@@ -24,56 +24,37 @@ if "results" not in st.session_state:
 if menu == "Command Center":
     st.title("🧠 Command Center")
 
-    results = st.session_state.results
+    r = st.session_state.results
 
-    if not results:
-        st.warning("No data yet.")
+    if r:
+        score = r["district_score"]
+
+        color = "🟢" if score > 80 else "🟡" if score > 60 else "🔴"
+        st.markdown(f"# {color} {score}")
+
+        col1, col2 = st.columns(2)
+        col1.metric("Stores", len(r["store_severity"]))
+        col2.metric("Patterns", len(r["patterns"]))
+
+        st.info(r["summary"])
     else:
-        district_score = results.get("district_score", 100)
-
-        # COLOR
-        if district_score > 80:
-            color = "🟢"
-        elif district_score > 60:
-            color = "🟡"
-        else:
-            color = "🔴"
-
-        st.markdown(f"# {color} District Score: {district_score}")
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Records", results.get("records_found", 0))
-        col2.metric("Priority Stores", len(results.get("priority_stores", [])))
-        col3.metric("Patterns", len(results.get("patterns", [])))
-
-        st.markdown("---")
-        st.info(results.get("summary", ""))
+        st.warning("No data yet")
 
 
 # -------------------------
 # INTAKE
 # -------------------------
 elif menu == "Intake":
-    uploaded_file = st.file_uploader("Upload file")
-    text_input = st.text_area("Paste text")
+    f = st.file_uploader("Upload")
+    t = st.text_area("Paste")
 
     if st.button("Analyze"):
-        if uploaded_file:
-            files = {
-                "file": (
-                    uploaded_file.name,
-                    uploaded_file.getvalue(),
-                    uploaded_file.type
-                )
-            }
-            res = requests.post(f"{API}/analyze/upload", files=files)
-
-        elif text_input:
-            res = requests.post(f"{API}/analyze/text", json={"text": text_input})
-
+        if f:
+            res = requests.post(f"{API}/analyze/upload",
+                                files={"file": (f.name, f.getvalue())})
         else:
-            st.stop()
+            res = requests.post(f"{API}/analyze/text",
+                                json={"text": t})
 
         if res.status_code == 200:
             st.session_state.results = res.json()
@@ -83,45 +64,19 @@ elif menu == "Intake":
 # PRIORITIES
 # -------------------------
 elif menu == "Priorities":
-    st.header("🔥 Priority Stores")
+    r = st.session_state.results
 
-    results = st.session_state.results
+    if r:
+        for s in r["priority_stores"]:
+            sev = r["store_severity"][s]
 
-    if results:
-        for store in results.get("priority_stores", []):
+            st.markdown(f"## Store {s} ({sev})")
 
-            metrics = results["store_metrics"].get(store, [])
-            severity = results["store_severity"].get(store, 0)
-            impacts = results.get("impacts", {}).get(store, [])
-            actions = results.get("actions", [])
-
-            if severity > 75:
-                color = "🔴"
-            elif severity > 40:
-                color = "🟡"
-            else:
-                color = "🟢"
-
-            st.markdown(f"## {color} Store {store}")
-            st.metric("Severity", severity)
-
-            if metrics:
-                cols = st.columns(len(metrics))
-                for i, m in enumerate(metrics):
-                    with cols[i]:
-                        st.metric(
-                            m["metric"],
-                            m["actual"],
-                            round(m["variance"], 2) if m["variance"] else 0
-                        )
-
-            st.markdown("### 💰 Why This Matters")
-            for impact in impacts:
+            for impact in r["impacts"].get(s, []):
                 st.warning(impact)
 
-            st.markdown("### ✅ Actions")
-            for a in actions:
-                if store in a:
+            for a in r["actions"]:
+                if s in a:
                     st.success(a)
 
             st.markdown("---")
@@ -131,39 +86,41 @@ elif menu == "Priorities":
 # PATTERNS
 # -------------------------
 elif menu == "Patterns":
-    st.header("🧠 Patterns")
+    r = st.session_state.results
 
-    results = st.session_state.results
-
-    if results:
-        for p in results.get("patterns", []):
-            st.error(
-                f"{p['metric']} across {p['count']} stores: "
-                f"{', '.join(map(str, p['stores']))}"
-            )
+    if r:
+        for p in r["patterns"]:
+            st.error(f"{p['metric']} across {p['count']} stores")
 
 
 # -------------------------
-# RISKS
+# ALERTS 🔥
 # -------------------------
-elif menu == "Risks":
-    st.header("⚠️ Risks")
+elif menu == "Alerts":
+    r = st.session_state.results
 
-    results = st.session_state.results
-
-    if results:
-        for r in results.get("risks", []):
-            st.warning(r)
+    if r:
+        if r["alerts"]:
+            for a in r["alerts"]:
+                st.error(a)
+        else:
+            st.success("No alerts")
 
 
 # -------------------------
-# ACTIONS
+# ASK AI 🔥
 # -------------------------
-elif menu == "Actions":
-    st.header("✅ Actions")
+elif menu == "Ask AI":
+    r = st.session_state.results
 
-    results = st.session_state.results
+    if r:
+        q = st.text_input("Ask DistrictOS")
 
-    if results:
-        for a in results.get("actions", []):
-            st.success(a)
+        if q:
+            # simple local logic (expand later)
+            if "worst" in q.lower():
+                st.write(f"Focus on store {r['priority_stores'][0]}")
+            elif "fix" in q.lower():
+                st.write(r["actions"][:3])
+            else:
+                st.write("Ask about priorities or risks")
