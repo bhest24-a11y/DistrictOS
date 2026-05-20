@@ -1,9 +1,17 @@
 import os
+from dotenv import load_dotenv
 from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+load_dotenv()
 
-def generate_ai_insights(text):
+api_key = os.getenv("OPENAI_API_KEY")
+
+client = OpenAI(api_key=api_key)
+
+
+def generate_ai_insights(text: str):
+    if not text:
+        return "No report text provided."
 
     prompt = f"""
 You are an elite retail operations analyst.
