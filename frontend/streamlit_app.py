@@ -1,77 +1,95 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
 
 API = "https://districtos.onrender.com/api"
 
 st.set_page_config(layout="wide")
 
 # -------------------------
-# GLOBAL STATE
+# STATE
 # -------------------------
 if "results" not in st.session_state:
     st.session_state.results = None
 
-if "selected_store" not in st.session_state:
-    st.session_state.selected_store = None
+if "focus_store" not in st.session_state:
+    st.session_state.focus_store = None
 
 # -------------------------
-# SIDEBAR (ROLE + NAV)
+# ELITE STYLE 🔥
 # -------------------------
-role = st.sidebar.selectbox("View", ["Executive", "Operator"])
+st.markdown("""
+<style>
 
+/* GLOBAL */
+body {
+    background: radial-gradient(circle at top, #0f172a, #020617);
+    color: #E2E8F0;
+}
+
+/* GLASS CARDS */
+.card {
+    backdrop-filter: blur(16px);
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 18px;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    transition: all 0.2s ease;
+}
+
+/* HOVER EFFECT */
+.card:hover {
+    transform: scale(1.02);
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* KPI */
+.kpi {
+    font-size: 42px;
+    font-weight: 700;
+}
+
+/* LABEL */
+.label {
+    font-size: 11px;
+    color: #94A3B8;
+}
+
+/* GRADIENT BAR */
+.bar {
+    height: 8px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #22c55e, #facc15, #ef4444);
+    margin-top: 8px;
+}
+
+/* SECTION */
+.section {
+    margin-top: 25px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------
+# SIDEBAR
+# -------------------------
 menu = st.sidebar.radio("", [
     "Command Center",
     "Operations",
     "Intelligence",
-    "Alerts",
     "AI Command",
     "Intake"
 ])
 
 st.sidebar.markdown("## DistrictOS")
-st.sidebar.caption("Enterprise Operating System")
+st.sidebar.caption("Flagship Intelligence System")
 
-# -------------------------
-# GLOBAL STYLE (PREMIUM)
-# -------------------------
-st.markdown("""
-<style>
-.card {
-    background: linear-gradient(145deg, #0F172A, #020617);
-    padding: 18px;
-    border-radius: 16px;
-    border: 1px solid #1E293B;
-    margin-bottom: 16px;
-}
-.kpi {
-    font-size: 36px;
-    font-weight: 700;
-}
-.label {
-    font-size: 11px;
-    color: #94A3B8;
-}
-.section {
-    margin-top: 25px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# -------------------------
-# HEADER (ALWAYS VISIBLE)
-# -------------------------
 r = st.session_state.results
 
-if r:
-    score = r["district_score"]
-    color = "green" if score > 80 else "orange" if score > 60 else "red"
-
-    st.markdown(f"### District Score: :{color}[{score}]")
-
 # -------------------------
-# COMMAND CENTER (EXEC VIEW)
+# COMMAND CENTER 🔥 (NOW FEELS PREMIUM)
 # -------------------------
 if menu == "Command Center":
 
@@ -80,27 +98,38 @@ if menu == "Command Center":
     if not r:
         st.warning("No data loaded")
     else:
-        col1, col2, col3, col4 = st.columns(4)
+        score = r["district_score"]
 
-        col1.metric("Stores", len(r["store_severity"]))
-        col2.metric("Priority", len(r["priority_stores"]))
-        col3.metric("Patterns", len(r["patterns"]))
-        col4.metric("Alerts", len(r["alerts"]))
+        # HERO KPI (BIG DIFFERENCE)
+        st.markdown(f"""
+        <div class="card">
+            <div class="label">DISTRICT HEALTH</div>
+            <div class="kpi">{score}</div>
+            <div class="bar"></div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("### Top Risk Stores")
+        st.markdown("### Priority Stores")
 
-        for s in r["priority_stores"][:3]:
+        cols = st.columns(3)
+
+        for i, s in enumerate(r["priority_stores"][:3]):
             sev = r["store_severity"][s]
 
-            st.markdown(f"""
-            <div class="card">
-                <div class="label">STORE {s}</div>
-                <div class="kpi">{sev}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            with cols[i]:
+                if st.button(f"Store {s}"):
+                    st.session_state.focus_store = s
+
+                st.markdown(f"""
+                <div class="card">
+                    <div class="label">STORE {s}</div>
+                    <div class="kpi">{sev}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
 
 # -------------------------
-# OPERATIONS (DECISION LAYER)
+# OPERATIONS (FOCUS MODE 🔥)
 # -------------------------
 elif menu == "Operations":
 
@@ -108,53 +137,61 @@ elif menu == "Operations":
 
     if r:
 
-        selected = st.selectbox(
-            "Select Store",
-            r["priority_stores"]
-        )
+        # SELECT STORE
+        selected = st.selectbox("Select Store", r["priority_stores"])
+        st.session_state.focus_store = selected
 
-        st.session_state.selected_store = selected
+        store = st.session_state.focus_store
 
-        sev = r["store_severity"][selected]
-        metrics = r["store_metrics"][selected]
-        impacts = r["impacts"].get(selected, [])
+        sev = r["store_severity"][store]
+        metrics = r["store_metrics"][store]
+        impacts = r["impacts"].get(store, [])
 
-        # SEVERITY BAR 🔥
-        st.progress(sev / 100)
-
-        st.markdown(f"## Store {selected} | Severity {sev}")
+        # 🔥 FOCUS PANEL (THIS IS THE BIG DIFFERENCE)
+        st.markdown(f"""
+        <div class="card">
+            <div class="label">FOCUS STORE</div>
+            <div class="kpi">Store {store}</div>
+            <div class="kpi">{sev}</div>
+            <div class="bar"></div>
+        </div>
+        """, unsafe_allow_html=True)
 
         # KPI GRID
+        st.markdown("### Performance")
+
         cols = st.columns(len(metrics))
 
         for i, m in enumerate(metrics):
             with cols[i]:
-                st.metric(
-                    m["metric"],
-                    m["actual"],
-                    round(m["variance"], 2) if m["variance"] else 0,
-                    help=f"Target: {m['target']} | Status: {m['status']}"
-                )
+                st.markdown(f"""
+                <div class="card">
+                    <div class="label">{m['metric']}</div>
+                    <div class="kpi">{m['actual']}</div>
+                    <div class="label">Target {m['target']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        # TREND INLINE
-        trend = r.get("trend_memory", {}).get(selected, [])
+        # TREND
+        trend = r.get("trend_memory", {}).get(store, [])
         if trend:
             df = pd.DataFrame(trend)
             st.line_chart(df["severity"])
 
-        # IMPACT → DECISION LANGUAGE
-        st.markdown("### Business Impact")
+        # IMPACT
+        st.markdown("### Impact")
         for i in impacts:
             st.error(i)
 
-        # ACTIONS → PRIORITIZED
-        st.markdown("### Recommended Actions")
+        # ACTIONS
+        st.markdown("### Actions")
         for a in r["actions"]:
-            if selected in a:
+            if store in a:
                 st.success(a)
 
+
 # -------------------------
-# INTELLIGENCE (PATTERNS)
+# INTELLIGENCE
 # -------------------------
 elif menu == "Intelligence":
 
@@ -162,59 +199,35 @@ elif menu == "Intelligence":
 
     if r:
         for p in r["patterns"]:
-            with st.container():
-                st.markdown(f"""
-                <div class="card">
-                    <div class="label">{p['metric'].upper()}</div>
-                    <div class="kpi">{p['count']} stores</div>
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="card">
+                <div class="label">{p['metric']}</div>
+                <div class="kpi">{p['count']} stores</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-                st.caption(", ".join(map(str, p["stores"])))
 
 # -------------------------
-# ALERTS (REAL-TIME FEEL)
-# -------------------------
-elif menu == "Alerts":
-
-    st.title("Alerts")
-
-    if r:
-        if r["alerts"]:
-            for a in r["alerts"]:
-                st.error(a)
-        else:
-            st.success("No active alerts")
-
-# -------------------------
-# AI COMMAND (REAL PRODUCT FEEL)
+# AI COMMAND (FEELS LIKE PRODUCT)
 # -------------------------
 elif menu == "AI Command":
 
     st.title("AI Command")
 
     if r:
-        st.caption("Ask DistrictOS what to do")
-
         q = st.text_input("What do you want to know?")
 
         if q:
-            with st.spinner("Analyzing..."):
+            with st.spinner("Thinking..."):
+                res = requests.post(f"{API}/ask", json={"question": q})
+                if res.status_code == 200:
+                    st.markdown(f"""
+                    <div class="card">
+                        <div class="label">AI RESPONSE</div>
+                        <p>{res.json()["response"]}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                if "worst" in q:
-                    st.markdown(f"### Focus on Store {r['priority_stores'][0]}")
-
-                elif "fix" in q:
-                    st.markdown("### Top Actions")
-                    for a in r["actions"][:3]:
-                        st.write(a)
-
-                elif "risk" in q:
-                    for i in r["risks"]:
-                        st.error(i)
-
-                else:
-                    st.write("Try: worst store, risks, or what to fix")
 
 # -------------------------
 # INTAKE
