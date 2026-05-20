@@ -5,9 +5,6 @@ st.set_page_config(layout="wide", page_title="DistrictOS")
 
 API = "https://districtos.onrender.com/api"
 
-# -------------------------
-# SIDEBAR
-# -------------------------
 menu = st.sidebar.radio("DistrictOS", [
     "Command Center",
     "Intake",
@@ -16,9 +13,6 @@ menu = st.sidebar.radio("DistrictOS", [
     "Risks",
     "Actions"
 ])
-
-st.sidebar.markdown("---")
-st.sidebar.caption("AI District Operating System")
 
 if "results" not in st.session_state:
     st.session_state.results = None
@@ -35,6 +29,18 @@ if menu == "Command Center":
     if not results:
         st.warning("No data yet.")
     else:
+        district_score = results.get("district_score", 100)
+
+        # COLOR
+        if district_score > 80:
+            color = "🟢"
+        elif district_score > 60:
+            color = "🟡"
+        else:
+            color = "🔴"
+
+        st.markdown(f"# {color} District Score: {district_score}")
+
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Records", results.get("records_found", 0))
@@ -49,10 +55,8 @@ if menu == "Command Center":
 # INTAKE
 # -------------------------
 elif menu == "Intake":
-    st.header("📥 Data Intake")
-
     uploaded_file = st.file_uploader("Upload file")
-    text_input = st.text_area("Paste report text")
+    text_input = st.text_area("Paste text")
 
     if st.button("Analyze"):
         if uploaded_file:
@@ -69,14 +73,10 @@ elif menu == "Intake":
             res = requests.post(f"{API}/analyze/text", json={"text": text_input})
 
         else:
-            st.warning("Upload or paste something")
             st.stop()
 
         if res.status_code == 200:
             st.session_state.results = res.json()
-            st.success("Analysis complete")
-        else:
-            st.error(res.text)
 
 
 # -------------------------
@@ -87,9 +87,7 @@ elif menu == "Priorities":
 
     results = st.session_state.results
 
-    if not results:
-        st.warning("No data yet.")
-    else:
+    if results:
         for store in results.get("priority_stores", []):
 
             metrics = results["store_metrics"].get(store, [])
@@ -97,7 +95,6 @@ elif menu == "Priorities":
             impacts = results.get("impacts", {}).get(store, [])
             actions = results.get("actions", [])
 
-            # COLOR
             if severity > 75:
                 color = "🔴"
             elif severity > 40:
@@ -106,34 +103,22 @@ elif menu == "Priorities":
                 color = "🟢"
 
             st.markdown(f"## {color} Store {store}")
-            st.metric("Severity Score", severity)
+            st.metric("Severity", severity)
 
-            # METRICS
             if metrics:
                 cols = st.columns(len(metrics))
                 for i, m in enumerate(metrics):
                     with cols[i]:
                         st.metric(
-                            m["metric"].upper(),
+                            m["metric"],
                             m["actual"],
                             round(m["variance"], 2) if m["variance"] else 0
                         )
 
-            # WHY
-            st.markdown("### 🧠 Why")
-            for m in metrics:
-                if m["status"] == "off_track":
-                    st.error(
-                        f"{m['metric'].upper()} off track "
-                        f"({m['actual']} vs {m['target']})"
-                    )
-
-            # 🔥 WHY THIS MATTERS
             st.markdown("### 💰 Why This Matters")
             for impact in impacts:
                 st.warning(impact)
 
-            # ACTIONS
             st.markdown("### ✅ Actions")
             for a in actions:
                 if store in a:
@@ -146,21 +131,16 @@ elif menu == "Priorities":
 # PATTERNS
 # -------------------------
 elif menu == "Patterns":
-    st.header("🧠 Pattern Detection")
+    st.header("🧠 Patterns")
 
     results = st.session_state.results
 
     if results:
-        patterns = results.get("patterns", [])
-
-        if not patterns:
-            st.success("No patterns detected")
-        else:
-            for p in patterns:
-                st.error(
-                    f"{p['metric'].upper()} across {p['count']} stores\n"
-                    f"Stores: {', '.join(map(str, p['stores']))}"
-                )
+        for p in results.get("patterns", []):
+            st.error(
+                f"{p['metric']} across {p['count']} stores: "
+                f"{', '.join(map(str, p['stores']))}"
+            )
 
 
 # -------------------------
