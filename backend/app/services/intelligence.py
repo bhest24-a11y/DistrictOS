@@ -13,12 +13,12 @@ def generate_insights(records):
     risks = []
     actions = []
     patterns = []
-    impacts = defaultdict(list)  # 🔥 NEW
+    impacts = defaultdict(list)
 
     total_off_track = 0
 
     # -------------------------
-    # BUILD METRICS + SCORING
+    # BUILD METRICS + SCORING + IMPACT
     # -------------------------
     for r in records:
 
@@ -33,7 +33,7 @@ def generate_insights(records):
         if r.status == "off_track":
             total_off_track += 1
 
-            # % deviation
+            # % deviation scoring
             if r.target and r.target != 0:
                 pct_diff = abs((r.actual - r.target) / r.target)
             else:
@@ -51,21 +51,21 @@ def generate_insights(records):
             store_scores[r.store] += score
 
             # -------------------------
-            # 🔥 WHY THIS MATTERS (IMPACT)
+            # WHY THIS MATTERS
             # -------------------------
             if r.metric == "sales":
                 impacts[r.store].append(
-                    f"Revenue risk: sales below target by {round(r.variance,2)}"
+                    f"Revenue risk: down {round(r.variance,2)} vs plan"
                 )
 
             elif r.metric == "labor":
                 impacts[r.store].append(
-                    f"Margin risk: labor above plan by {round(r.variance,2)}"
+                    f"Margin risk: labor over by {round(r.variance,2)}"
                 )
 
             elif r.metric == "shrink":
                 impacts[r.store].append(
-                    f"Profit risk: shrink impacting inventory control"
+                    "Profit risk: shrink impacting inventory"
                 )
 
             else:
@@ -74,7 +74,7 @@ def generate_insights(records):
                 )
 
     # -------------------------
-    # NORMALIZE SEVERITY
+    # NORMALIZE SEVERITY (0–100)
     # -------------------------
     max_score = max(store_scores.values()) if store_scores else 1
 
@@ -122,19 +122,13 @@ def generate_insights(records):
                 continue
 
             if m["metric"] == "labor":
-                actions.append(
-                    f"Reduce labor in store {store}"
-                )
+                actions.append(f"Reduce labor in store {store}")
 
             elif m["metric"] == "sales":
-                actions.append(
-                    f"Drive sales recovery in store {store}"
-                )
+                actions.append(f"Drive sales recovery in store {store}")
 
             elif m["metric"] == "shrink":
-                actions.append(
-                    f"Investigate shrink in store {store}"
-                )
+                actions.append(f"Investigate shrink in store {store}")
 
     actions = list(set(actions))[:6]
 
@@ -142,7 +136,8 @@ def generate_insights(records):
     # SUMMARY
     # -------------------------
     summary = (
-        f"{total_off_track} metrics off track across {len(records)} records."
+        f"{total_off_track} metrics off track across {len(records)} records. "
+        f"{len(patterns)} patterns detected."
     )
 
     return {
@@ -151,7 +146,7 @@ def generate_insights(records):
         "store_metrics": dict(store_metrics),
         "store_severity": store_severity,
         "patterns": patterns,
-        "impacts": dict(impacts),  # 🔥 NEW
+        "impacts": dict(impacts),
         "risks": risks,
         "actions": actions,
         "records_found": len(records)
