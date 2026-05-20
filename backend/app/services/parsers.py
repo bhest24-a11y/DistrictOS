@@ -1,177 +1,192 @@
-from pathlib import Path
 import re
-import pandas as pd
-from app.models.schemas import KPIRecord
-
-# -------------------------
-# NORMALIZATION MAPS
-# -------------------------
-
-METRIC_MAP = {
-    "sales": ["sales", "revenue", "rev"],
-    "labor": ["labor", "hrs", "hours"],
-    "shrink": ["shrink", "loss"],
-    "service": ["service", "osat"],
-    "oos": ["oos", "out of stock"],
-    "forecast": ["forecast"],
-}
-
-DEPARTMENT_MAP = {
-    "produce": ["produce"],
-    "meat": ["meat"],
-    "deli": ["deli"],
-    "bakery": ["bakery"],
-    "grocery": ["grocery"],
-    "dairy": ["dairy"],
-    "front end": ["front end", "frontend", "fe"],
-}
-
-# -------------------------
-# MAIN ENTRY
-# -------------------------
-
-def parse_file(path: Path) -> list[KPIRecord]:
-    if path.suffix.lower() in [".xlsx", ".xls", ".csv"]:
-        return parse_excel_or_csv(path)
-    return []
+from typing import List, Dict
 
 
 # -------------------------
-# EXCEL / CSV PARSER
+# CORE PARSER
 # -------------------------
+def parse_text_to_records(text: str) -> List[Dict]:
 
-def parse_excel_or_csv(path: Path) -> list[KPIRecord]:
-    if path.suffix.lower() in [".xlsx", ".xls"]:
-        df = pd.read_excel(path)
-    else:
-        df = pd.read_csv(path)
-
-    records = []
-
-    for _, row in df.iterrows():
-        # Combine entire row into one string
-        raw_row = " ".join([str(v) for v in row.values]).lower()
-
-        # Extract numbers
-        numbers = re.findall(r"\d+\.?\d*", raw_row)
-
-        # 🚨 FILTER OUT JUNK ROWS
-        if len(numbers) < 2:
-            continue
-
-        actual = float(numbers[0])
-        target = float(numbers[1])
-
-        variance = compute_variance(actual, target)
-
-        metric = normalize_metric(raw_row)
-        department = normalize_department(raw_row)
-        store = extract_store(raw_row)
-
-        # 🚨 Skip useless rows
-        if metric == "unknown_metric":
-            continue
-
-        records.append(KPIRecord(
-            date=None,
-            store=store,
-            department=department,
-            metric=metric,
-            actual=actual,
-            target=target,
-            variance=variance,
-            status=status(metric, actual, target),
-            source=str(path.name),
-            confidence_score=0.9
-        ))
-
-    return records
-
-
-# -------------------------
-# TEXT PARSER (OCR / PASTE)
-# -------------------------
-
-def parse_text_blob(text: str) -> list[KPIRecord]:
-    records = []
     lines = text.split("\n")
+    records = []
 
     for line in lines:
-        clean = line.lower().strip()
 
-        numbers = re.findall(r"\d+\.?\d*", clean)
+        # Example formats we handle:
+        # Store 101 Sales: 80 Target: 100 Labor: 120
+        # 102 | sales=90 | labor=110
 
-        if len(numbers) < 2:
+        store_match = re.search(r"\b(\d{3})\b", line)
+        if not store_match:
             continue
 
-        actual = float(numbers[0])
-        target = float(numbers[1])
+        store_id = store_match.group(1)
 
-        variance = compute_variance(actual, target)
+        sales = extract_number(line, "sales")
+        labor = extract_number(line, "labor")
+        target = extract_number(line, "target")
 
-        metric = normalize_metric(clean)
-        department = normalize_department(clean)
-        store = extract_store(clean)
+        record = {
+            "store": store_id,
+            "sales": sales,
+            "labor": labor,
+            "target": target
+        }
 
-        if metric == "unknown_metric":
-            continue
-
-        records.append(KPIRecord(
-            date=None,
-            store=store,
-            department=department,
-            metric=metric,
-            actual=actual,
-            target=target,
-            variance=variance,
-            status=status(metric, actual, target),
-            source="ocr_text",
-            confidence_score=0.75
-        ))
+        records.append(record)
 
     return records
 
 
 # -------------------------
-# NORMALIZATION
+# HELPER: NUMBER EXTRACTION
 # -------------------------
+def extract_number(text: str, keyword: str):
 
-def normalize_metric(text: str) -> str:
-    for key, values in METRIC_MAP.items():
-        for v in values:
-            if v in text:
-                return key
-    return "unknown_metric"
+    pattern = rf"{keyword}[:=]?\s*(\d+)"
+    match = re.search(pattern, text.lower())
 
+    if match:
+        return int(match.group(1))
 
-def normalize_department(text: str):
-    for key, values in DEPARTMENT_MAP.items():
-        for v in values:
-            if v in text:
-                return key
     return None
 
 
 # -------------------------
-# HELPERS
+# STRUCTURE FOR ENGINE
 # -------------------------
+def normalize_records(records: List[Dict]) -> Dict:
 
-def extract_store(text: str):
-    match = re.search(r"\b\d{3,5}\b", text)
-    return match.group(0) if match else None
+    store_severity = {}
+    store_metrics = {}
+    impacts = {}
+    actions = []
 
+    for r in records:
 
-def compute_variance(actual, target):
-    return actual - target if actual is not None and target is not None else None
+        store = r["store"]
 
+        sales = r.get("sales") or 0
+        labor = r.get("labor") or 0
+        target = r.get("target") or 100
 
-def status(metric, actual, target):
-    if actual is None or target is None:
-        return "unknown"
+        # -------------------------
+        # SEVERITY LOGIC 🔥
+        # -------------------------
+        severity = 0
 
-    # Higher is better
-    if metric in ["sales"]:
-        return "off_track" if actual < target else "on_track"
+        if sales < target:
+            severity += (target - sales)
 
-    # Lower is better
-    return "off_track" if actual > target else "on_track"
+        if labor > target:
+            severity += (labor - target)
+
+        severity = min(100, severity)
+
+        store_severity[store] = severity
+
+        # -------------------------
+        # METRICS
+        # -------------------------
+        store_metrics[store] = [
+            {
+                "metric": "Sales",
+                "actual": sales,
+                "target": target,
+                "variance": sales - target,
+                "status": "bad" if sales < target else "good"
+            },
+            {
+                "metric": "Labor",
+                "actual": labor,
+                "target": target,
+                "variance": labor - target,
+                "status": "bad" if labor > target else "good"
+            }
+        ]
+
+        # -------------------------
+        # IMPACTS
+        # -------------------------
+        store_impacts = []
+
+        if sales < target:
+            store_impacts.append("Sales below target → revenue risk")
+
+        if labor > target:
+            store_impacts.append("Labor above target → margin pressure")
+
+        impacts[store] = store_impacts
+
+        # -------------------------
+        # ACTIONS
+        # -------------------------
+        if sales < target:
+            actions.append(f"Increase sales performance at store {store}")
+
+        if labor > target:
+            actions.append(f"Reduce labor cost at store {store}")
+
+    # -------------------------
+    # PRIORITIZATION
+    # -------------------------
+    priority_stores = sorted(
+        store_severity,
+        key=store_severity.get,
+        reverse=True
+    )
+
+    # -------------------------
+    # DISTRICT SCORE
+    # -------------------------
+    if store_severity:
+        avg_severity = sum(store_severity.values()) / len(store_severity)
+        district_score = int(100 - avg_severity)
+    else:
+        district_score = 100
+
+    # -------------------------
+    # PATTERNS
+    # -------------------------
+    patterns = []
+
+    low_sales = [s for s, v in store_severity.items() if v > 50]
+    if low_sales:
+        patterns.append({
+            "metric": "performance",
+            "count": len(low_sales),
+            "stores": low_sales
+        })
+
+    # -------------------------
+    # ALERTS
+    # -------------------------
+    alerts = []
+
+    for s, sev in store_severity.items():
+        if sev > 80:
+            alerts.append(f"Store {s} critical performance issue")
+
+    # -------------------------
+    # FINAL STRUCTURE
+    # -------------------------
+    return {
+        "district_score": district_score,
+        "summary": "Automated analysis of store performance completed.",
+
+        "store_severity": store_severity,
+        "priority_stores": priority_stores[:5],
+
+        "patterns": patterns,
+        "alerts": alerts,
+
+        "impacts": impacts,
+        "actions": list(set(actions)),  # remove duplicates
+
+        "store_metrics": store_metrics,
+
+        "trend_memory": {},  # will be filled later
+        "risks": [
+            "Underperformance detected across multiple stores"
+        ]
+    }
