@@ -1,257 +1,295 @@
 import streamlit as st
 import requests
-
-API = "https://districtos.onrender.com/api"
+import random
 
 st.set_page_config(layout="wide")
 
-# -------------------------
-# STATE
-# -------------------------
-if "results" not in st.session_state:
-    st.session_state.results = None
-
-# -------------------------
-# 🔥 GLOBAL STYLE (TOP 1% LOOK)
-# -------------------------
+# ================================
+# 🔥 GLOBAL ELITE STYLE (FULL)
+# ================================
 st.markdown("""
 <style>
 
-/* BACKGROUND */
+/* --- BACKGROUND --- */
 body {
     background: radial-gradient(circle at top left, #0f172a, #020617);
     color: #E2E8F0;
 }
 
-/* SIDEBAR */
+/* --- SIDEBAR --- */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #020617, #0f172a);
     border-right: 1px solid #1e293b;
 }
 
-/* SIDEBAR TEXT */
-section[data-testid="stSidebar"] label {
-    font-size: 14px;
-    font-weight: 500;
-    color: #cbd5f5;
-}
-
-/* HEADER BAR */
+/* --- HEADER BAR --- */
 .header-bar {
     position: sticky;
     top: 0;
     z-index: 999;
     background: rgba(2,6,23,0.7);
-    backdrop-filter: blur(10px);
-    padding: 12px 20px;
+    backdrop-filter: blur(12px);
+    padding: 14px 22px;
     border-bottom: 1px solid #1e293b;
+    animation: fadeSlide 0.6s ease;
 }
 
-/* KPI CARD */
+/* --- KPI CARD --- */
 .kpi-card {
     background: linear-gradient(145deg, #020617, #0f172a);
     padding: 20px;
     border-radius: 16px;
     border: 1px solid #1e293b;
     box-shadow: 0 6px 30px rgba(0,0,0,0.6);
+    transition: all 0.25s ease;
+}
+.kpi-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.9);
 }
 
-/* BIG NUMBER */
+/* --- BIG NUMBER --- */
 .kpi-big {
     font-size: 52px;
     font-weight: 700;
+    animation: popIn 0.4s ease;
 }
 
-/* LABEL */
+/* --- LABEL --- */
 .kpi-label {
     font-size: 12px;
     color: #94a3b8;
 }
 
-/* CARD */
+/* --- CARD --- */
 .card {
     background: linear-gradient(145deg, #020617, #0f172a);
     padding: 16px;
     border-radius: 14px;
     border: 1px solid #1e293b;
     margin-bottom: 16px;
+    transition: all 0.25s ease;
+}
+.card:hover {
+    transform: translateX(6px);
 }
 
-/* COLORS */
+/* --- COLORS --- */
 .red { color: #ef4444; }
 .yellow { color: #facc15; }
 .green { color: #22c55e; }
 
+/* --- SHIMMER LOADING --- */
+.shimmer {
+    height: 20px;
+    width: 100%;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg,
+        #020617 25%,
+        #1e293b 50%,
+        #020617 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* --- ANIMATIONS --- */
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+@keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+    70% { box-shadow: 0 0 0 12px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------
-# SIDEBAR NAV
-# -------------------------
-menu = st.sidebar.radio("", [
-    "Command Center",
-    "Operations",
-    "AI Command",
-    "Intake"
-])
+# ================================
+# 🧠 SESSION STATE
+# ================================
+if "results" not in st.session_state:
+    st.session_state.results = None
 
-st.sidebar.markdown("## DistrictOS")
-st.sidebar.caption("Enterprise Intelligence System")
+# ================================
+# 📡 BACKEND CALL
+# ================================
+def analyze_text(text):
+    try:
+        res = requests.post(
+            "http://localhost:8000/analyze/text",
+            json={"text": text}
+        )
+        return res.json()
+    except:
+        return None
 
-r = st.session_state.results
+# ================================
+# 📊 SIDEBAR NAV
+# ================================
+view = st.sidebar.radio(
+    "View",
+    ["Command Center", "Operations", "Intelligence", "Alerts", "AI Command", "Intake"]
+)
 
-# -------------------------
-# 🔥 STICKY EXECUTIVE HEADER
-# -------------------------
-if r:
-    score = r["district_score"]
+# ================================
+# 📥 INTAKE PAGE
+# ================================
+if view == "Intake":
+    st.title("Upload Data")
 
-    color = "green" if score > 80 else "yellow" if score > 60 else "red"
+    text = st.text_area("Paste report text")
 
-    st.markdown(f"""
-    <div class="header-bar">
-        <span style="font-size:14px; color:#94a3b8;">DISTRICT HEALTH</span><br>
-        <span class="kpi-big {color}">{score}</span>
-    </div>
-    """, unsafe_allow_html=True)
+    if st.button("Analyze"):
+        st.session_state.results = analyze_text(text)
 
-# -------------------------
-# COMMAND CENTER
-# -------------------------
-if menu == "Command Center":
+# ================================
+# 📊 COMMAND CENTER
+# ================================
+if view == "Command Center":
+
+    r = st.session_state.results
 
     st.title("Command Center")
+
+    # ----------------------------
+    # 🔥 HEADER BAR
+    # ----------------------------
+    if r:
+        score = r.get("district_score", 75)
+        color = "green" if score > 80 else "yellow" if score > 60 else "red"
+
+        st.markdown(f"""
+        <div class="header-bar">
+            <div class="kpi-label">DISTRICT HEALTH</div>
+            <div class="kpi-big {color}">{score}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ----------------------------
+        # ⚡ LIVE SYSTEM STATUS
+        # ----------------------------
+        status = random.choice([
+            "Analyzing store performance...",
+            "Detecting risk patterns...",
+            "Scanning execution gaps...",
+            "Optimizing district health..."
+        ])
+
+        st.markdown(f"""
+        <div style="font-size:12px; color:#94a3b8; margin-top:10px;">
+        ⚡ {status}
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ----------------------------
+    # 🚫 LOADING STATE
+    # ----------------------------
+    if not r:
+        for _ in range(4):
+            st.markdown('<div class="shimmer"></div><br>', unsafe_allow_html=True)
+        st.stop()
+
+    # ----------------------------
+    # 📈 KPI ROW
+    # ----------------------------
+    col1, col2, col3 = st.columns(3)
+
+    def kpi(label, value):
+        return f"""
+        <div class="kpi-card">
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-big">{value}</div>
+        </div>
+        """
+
+    col1.markdown(kpi("Stores", len(r.get("store_severity", {}))), unsafe_allow_html=True)
+    col2.markdown(kpi("Patterns", len(r.get("patterns", []))), unsafe_allow_html=True)
+    col3.markdown(kpi("Alerts", len(r.get("alerts", []))), unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ----------------------------
+    # 🔥 PRIORITY STORES (WITH PULSE)
+    # ----------------------------
+    st.markdown("### Top Risk Stores")
+
+    for s in r.get("priority_stores", [])[:5]:
+        sev = r["store_severity"].get(s, 0)
+
+        color = "red" if sev > 75 else "yellow" if sev > 40 else "green"
+        pulse = "animation: pulse 1.5s infinite;" if sev > 75 else ""
+
+        st.markdown(f"""
+        <div class="card" style="{pulse}">
+            <div class="kpi-label">STORE {s}</div>
+            <div class="kpi-big {color}">{sev}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ================================
+# 🚨 ALERTS PAGE
+# ================================
+if view == "Alerts":
+    st.title("Alerts")
+
+    r = st.session_state.results
 
     if not r:
         st.warning("No data loaded")
     else:
-        # 🔥 EXECUTIVE OVERVIEW
-        st.markdown("## Overview")
+        for alert in r.get("alerts", []):
+            st.error(alert)
 
-        col1, col2, col3 = st.columns(3)
+# ================================
+# 🧠 INTELLIGENCE PAGE
+# ================================
+if view == "Intelligence":
+    st.title("Intelligence")
 
-        col1.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">Stores</div>
-            <div class="kpi-big">{len(r["store_severity"])}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    r = st.session_state.results
 
-        col2.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">Patterns</div>
-            <div class="kpi-big">{len(r["patterns"])}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    if not r:
+        st.warning("No data loaded")
+    else:
+        st.write(r.get("patterns", []))
 
-        col3.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">Alerts</div>
-            <div class="kpi-big">{len(r["alerts"])}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-
-        # 🔥 PRIORITY STORES
-        st.markdown("### Top Risk Stores")
-
-        for s in r["priority_stores"][:3]:
-            sev = r["store_severity"][s]
-
-            color = "red" if sev > 75 else "yellow" if sev > 40 else "green"
-
-            st.markdown(f"""
-            <div class="card">
-                <div class="kpi-label">STORE {s}</div>
-                <div class="kpi-big {color}">{sev}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-# -------------------------
-# OPERATIONS
-# -------------------------
-elif menu == "Operations":
-
+# ================================
+# ⚙️ OPERATIONS PAGE
+# ================================
+if view == "Operations":
     st.title("Operations")
 
-    if r:
-        store = st.selectbox("Select Store", r["priority_stores"])
+    r = st.session_state.results
 
-        sev = r["store_severity"][store]
-        metrics = r["store_metrics"][store]
-        impacts = r["impacts"].get(store, [])
+    if not r:
+        st.warning("No data loaded")
+    else:
+        st.write(r.get("actions", []))
 
-        st.markdown(f"""
-        <div class="card">
-            <div class="kpi-label">STORE {store}</div>
-            <div class="kpi-big">{sev}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("### Metrics")
-
-        for m in metrics:
-            st.markdown(f"""
-            <div class="card">
-                <div class="kpi-label">{m['metric']}</div>
-                <div class="kpi-big">{m['actual']}</div>
-                <div class="kpi-label">Target {m['target']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("### Impact")
-        for i in impacts:
-            st.error(i)
-
-        st.markdown("### Actions")
-        for a in r["actions"]:
-            if store in a:
-                st.success(a)
-
-# -------------------------
-# AI COMMAND
-# -------------------------
-elif menu == "AI Command":
-
+# ================================
+# 🤖 AI COMMAND PAGE
+# ================================
+if view == "AI Command":
     st.title("AI Command")
 
-    if r:
-        q = st.text_input("Ask a question")
+    r = st.session_state.results
 
-        if q:
-            res = requests.post(f"{API}/ask", json={"question": q})
-
-            if res.status_code == 200:
-                st.markdown(f"""
-                <div class="card">
-                    <div class="kpi-label">AI RESPONSE</div>
-                    <p>{res.json()["response"]}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-# -------------------------
-# INTAKE
-# -------------------------
-elif menu == "Intake":
-
-    st.title("Data Intake")
-
-    f = st.file_uploader("Upload File")
-    t = st.text_area("Paste Data")
-
-    if st.button("Run Analysis"):
-        if f:
-            res = requests.post(
-                f"{API}/analyze/upload",
-                files={"file": (f.name, f.getvalue())}
-            )
-        else:
-            res = requests.post(
-                f"{API}/analyze/text",
-                json={"text": t}
-            )
-
-        if res.status_code == 200:
-            st.session_state.results = res.json()
-            st.success("Analysis complete")
+    if not r:
+        st.warning("No data loaded")
+    else:
+        st.write(r.get("summary", ""))
