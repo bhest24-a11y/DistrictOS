@@ -5,14 +5,16 @@ st.set_page_config(layout="wide", page_title="DistrictOS")
 
 API = "https://districtos.onrender.com/api"
 
+# -------------------------
+# SIDEBAR NAV
+# -------------------------
 menu = st.sidebar.radio("DistrictOS", [
-    "Home",
-    "Upload",
-    "District Health",
-    "Store Priorities",
+    "Command Center",
+    "Intake",
+    "Priorities",
     "Risks",
     "Actions",
-    "VP Recap",
+    "VP Brief",
     "Huddle"
 ])
 
@@ -23,32 +25,74 @@ if "results" not in st.session_state:
     st.session_state.results = None
 
 
-if menu == "Home":
-    st.title("DistrictOS")
-    st.subheader("AI-Powered District Intelligence")
+# -------------------------
+# COMMAND CENTER (NEW)
+# -------------------------
+if menu == "Command Center":
+    st.title("🧠 Command Center")
 
-    st.markdown("""
-    Upload messy data, screenshots, reports, or paste raw text.
+    results = st.session_state.results
 
-    DistrictOS will:
-    - Extract KPI data
-    - Identify risks
-    - Prioritize stores
-    - Generate actions
-    - Create VP summaries
-    - Create huddle scripts
-    """)
+    if not results:
+        st.warning("No data yet. Go to Intake.")
+    else:
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "Records",
+            results.get("records_found", 0)
+        )
+
+        col2.metric(
+            "Priority Stores",
+            len(results.get("priority_stores", []))
+        )
+
+        col3.metric(
+            "Risks",
+            len(results.get("risks", []))
+        )
+
+        st.markdown("---")
+
+        st.subheader("🔥 Top Priorities")
+        stores = results.get("priority_stores", [])
+
+        if not stores:
+            st.success("No critical stores right now")
+        else:
+            for s in stores[:5]:
+                st.error(f"{s}")
+
+        st.markdown("---")
+
+        st.subheader("⚠️ Key Risks")
+        risks = results.get("risks", [])
+
+        if not risks:
+            st.success("No major risks detected")
+        else:
+            for r in risks:
+                st.warning(r)
+
+        st.markdown("---")
+
+        st.subheader("🧠 AI Summary")
+        st.info(results.get("summary", "No summary available"))
 
 
-elif menu == "Upload":
-    st.header("Upload Data")
+# -------------------------
+# INTAKE (UPLOAD)
+# -------------------------
+elif menu == "Intake":
+    st.header("📥 Data Intake")
 
     uploaded_file = st.file_uploader(
-        "Upload file (CSV, Excel, Image)",
+        "Upload file",
         type=["csv", "xlsx", "xls", "png", "jpg", "jpeg", "mp4", "mov", "avi", "mkv"]
     )
 
-    text_input = st.text_area("Or paste raw report text")
+    text_input = st.text_area("Or paste report text")
 
     if st.button("Analyze"):
         response = None
@@ -84,32 +128,15 @@ elif menu == "Upload":
             st.success("Analysis complete")
             st.json(st.session_state.results)
         else:
-            st.error(f"Error processing data: {response.status_code}")
+            st.error(f"Error: {response.status_code}")
             st.text(response.text)
 
 
-elif menu == "District Health":
-    st.header("District Health Summary")
-
-    results = st.session_state.results
-
-    if not results:
-        st.warning("No data yet. Upload data first.")
-    else:
-        st.subheader(results.get("summary", "No summary available."))
-
-        records_found = results.get("records_found")
-        if records_found is not None:
-            st.metric("Records Found", records_found)
-
-        raw_text = results.get("raw_text_preview")
-        if raw_text:
-            with st.expander("Raw Extracted Text Preview"):
-                st.text(raw_text)
-
-
-elif menu == "Store Priorities":
-    st.header("Priority Stores")
+# -------------------------
+# PRIORITIES
+# -------------------------
+elif menu == "Priorities":
+    st.header("🔥 Priority Stores")
 
     results = st.session_state.results
 
@@ -122,60 +149,62 @@ elif menu == "Store Priorities":
             st.info("No priority stores detected.")
         else:
             for s in stores:
-                st.write(f"🔥 {s}")
+                st.error(f"🔥 {s}")
 
 
+# -------------------------
+# RISKS
+# -------------------------
 elif menu == "Risks":
-    st.header("Risks")
+    st.header("⚠️ Risks")
 
     results = st.session_state.results
 
     if not results:
         st.warning("No data yet.")
     else:
-        risks = results.get("risks", [])
-
-        if not risks:
-            st.info("No risks detected.")
-        else:
-            for r in risks:
-                st.write(f"⚠️ {r}")
+        for r in results.get("risks", []):
+            st.warning(r)
 
 
+# -------------------------
+# ACTIONS
+# -------------------------
 elif menu == "Actions":
-    st.header("Action Plan")
+    st.header("✅ Actions")
 
     results = st.session_state.results
 
     if not results:
         st.warning("No data yet.")
     else:
-        actions = results.get("actions", [])
-
-        if not actions:
-            st.info("No actions generated.")
-        else:
-            for a in actions:
-                st.write(f"✅ {a}")
+        for a in results.get("actions", []):
+            st.success(a)
 
 
-elif menu == "VP Recap":
-    st.header("VP Summary")
+# -------------------------
+# VP BRIEF
+# -------------------------
+elif menu == "VP Brief":
+    st.header("👔 VP Brief")
 
     results = st.session_state.results
 
     if not results:
         st.warning("No data yet.")
     else:
-        st.code(results.get("vp_summary", "No VP summary generated."), language="markdown")
+        st.code(results.get("vp_summary", ""), language="markdown")
 
 
+# -------------------------
+# HUDDLE
+# -------------------------
 elif menu == "Huddle":
-    st.header("Huddle Script")
+    st.header("🗣 Huddle")
 
     results = st.session_state.results
 
     if not results:
         st.warning("No data yet.")
     else:
-        st.code(results.get("huddle", "No huddle script generated."), language="markdown")
+        st.code(results.get("huddle", ""), language="markdown")
