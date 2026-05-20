@@ -1,99 +1,177 @@
 import streamlit as st
 import requests
-import pandas as pd
+
+# -------------------------
+# CONFIG
+# -------------------------
+st.set_page_config(layout="wide", page_title="DistrictOS")
 
 API = "https://districtos.onrender.com/api"
 
-st.set_page_config(page_title="DistrictOS Capture", layout="wide")
+# -------------------------
+# SIDEBAR NAVIGATION
+# -------------------------
+menu = st.sidebar.radio("DistrictOS", [
+    "Home",
+    "Upload",
+    "District Health",
+    "Store Priorities",
+    "Risks",
+    "Actions",
+    "VP Recap",
+    "Huddle"
+])
 
-st.title("DistrictOS Capture + Intelligence")
-st.caption("Upload it, screenshot it, or show it to DistrictOS — turn messy operational data into priorities.")
+st.sidebar.markdown("---")
+st.sidebar.caption("AI District Operating System")
 
-def render_output(data):
-    st.success("Analysis complete")
+# -------------------------
+# SESSION STATE
+# -------------------------
+if "results" not in st.session_state:
+    st.session_state.results = None
 
-    c1, c2 = st.columns(2)
+# -------------------------
+# HOME
+# -------------------------
+if menu == "Home":
+    st.title("DistrictOS")
+    st.subheader("AI-Powered District Intelligence")
 
-    with c1:
-        st.subheader("District Health Summary")
-        for item in data.get("district_health_summary", []):
-            st.write(f"- {item}")
+    st.markdown("""
+    Upload messy data, screenshots, or reports.
 
-        st.subheader("Highest Priority Stores")
-        stores = data.get("highest_priority_stores", [])
-        st.write(", ".join(stores) if stores else "No store-level priority detected yet.")
+    DistrictOS will:
+    - Extract KPI data
+    - Identify risks
+    - Prioritize stores
+    - Generate actions
+    - Create VP summaries + huddles
+    """)
 
-        st.subheader("Risks")
-        for item in data.get("risks", []):
-            st.write(f"- {item}")
+# -------------------------
+# UPLOAD
+# -------------------------
+elif menu == "Upload":
+    st.header("Upload Data")
 
-    with c2:
-        st.subheader("Likely Root Causes")
-        for item in data.get("likely_root_causes", []):
-            st.write(f"- {item}")
-
-        st.subheader("Suggested Actions")
-        for item in data.get("suggested_actions", []):
-            st.write(f"- {item}")
-
-    st.subheader("Cleaned KPI Records")
-    records = data.get("cleaned_records", [])
-    if records:
-        st.dataframe(pd.DataFrame(records), use_container_width=True)
-
-    st.subheader("VP Email Draft")
-    st.text_area("Copy/paste VP recap", data.get("vp_email_draft", ""), height=260)
-
-    st.subheader("Huddle Script")
-    st.text_area("Copy/paste huddle script", data.get("huddle_script", ""), height=220)
-
-st.warning(
-    "Capture rules: user-initiated only, visible recording indicator, redact sensitive fields, "
-    "process locally where possible, delete raw recordings after extraction, store cleaned KPI data and summaries only."
-)
-
-tab1, tab2, tab3 = st.tabs(["Upload Pictures / Files", "Paste Table Text", "Record Session Upload"])
-
-with tab1:
-    st.subheader("Upload pictures, screenshots, Excel, CSV, or video")
-    files = st.file_uploader(
-        "Drop files here",
-        accept_multiple_files=True,
-        type=["png", "jpg", "jpeg", "webp", "xlsx", "xls", "csv", "mp4", "mov", "avi", "mkv"]
+    uploaded_file = st.file_uploader(
+        "Upload file (CSV, Excel, Image)",
+        type=["csv", "xlsx", "xls", "png", "jpg", "jpeg"]
     )
-    if st.button("Analyze Uploads", type="primary") and files:
-        multipart = [("files", (f.name, f.getvalue(), f.type or "application/octet-stream")) for f in files]
-        with st.spinner("DistrictOS is extracting, redacting, normalizing, and analyzing..."):
-            r = requests.post(f"{API}/analyze/upload", files=multipart)
-        if r.ok:
-            render_output(r.json())
-        else:
-            st.error(r.text)
 
-with tab2:
-    st.subheader("Paste copied report/table text")
-    text = st.text_area("Paste report text here", height=250)
-    if st.button("Analyze Text") and text:
-        with st.spinner("Analyzing pasted text..."):
-            r = requests.post(f"{API}/analyze/text", data={"text": text})
-        if r.ok:
-            render_output(r.json())
-        else:
-            st.error(r.text)
+    text_input = st.text_area("Or paste raw report text")
 
-with tab3:
-    st.subheader("Record my review session")
-    st.info(
-        "Browser-level screen recording is normally handled by a web front end using getDisplayMedia. "
-        "For this Streamlit MVP, record using your OS tool, then upload the video here. "
-        "The backend extracts frames, redacts sensitive text, analyzes them, and deletes raw video after extraction."
-    )
-    video = st.file_uploader("Upload recorded review session", type=["mp4", "mov", "avi", "mkv"], key="video_only")
-    if st.button("Analyze Recording") and video:
-        multipart = [("files", (video.name, video.getvalue(), video.type or "application/octet-stream"))]
-        with st.spinner("Extracting frames and deleting raw recording after processing..."):
-            r = requests.post(f"{API}/analyze/upload", files=multipart)
-        if r.ok:
-            render_output(r.json())
+    if st.button("Analyze"):
+        if uploaded_file:
+            files = {"file": uploaded_file.getvalue()}
+
+            response = requests.post(f"{API}/analyze/upload", files=files)
+
+        elif text_input:
+            response = requests.post(
+                f"{API}/analyze/text",
+                json={"text": text_input}
+            )
         else:
-            st.error(r.text)
+            st.warning("Upload a file or paste text.")
+            st.stop()
+
+        if response.status_code == 200:
+            st.session_state.results = response.json()
+            st.success("Analysis complete")
+        else:
+            st.error("Error processing data")
+
+# -------------------------
+# DISTRICT HEALTH
+# -------------------------
+elif menu == "District Health":
+    st.header("District Health Summary")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet. Upload data first.")
+    else:
+        st.metric("Summary", results.get("summary", ""))
+
+# -------------------------
+# STORE PRIORITIES
+# -------------------------
+elif menu == "Store Priorities":
+    st.header("Priority Stores")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet.")
+    else:
+        stores = results.get("priority_stores", [])
+
+        if not stores:
+            st.info("No priority stores detected.")
+        else:
+            for s in stores:
+                st.write(f"🔥 {s}")
+
+# -------------------------
+# RISKS
+# -------------------------
+elif menu == "Risks":
+    st.header("Risks")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet.")
+    else:
+        risks = results.get("risks", [])
+
+        if not risks:
+            st.info("No risks detected.")
+        else:
+            for r in risks:
+                st.write(f"⚠️ {r}")
+
+# -------------------------
+# ACTIONS
+# -------------------------
+elif menu == "Actions":
+    st.header("Action Plan")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet.")
+    else:
+        actions = results.get("actions", [])
+
+        for a in actions:
+            st.write(f"✅ {a}")
+
+# -------------------------
+# VP RECAP
+# -------------------------
+elif menu == "VP Recap":
+    st.header("VP Summary")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet.")
+    else:
+        st.code(results.get("vp_summary", ""), language="markdown")
+
+# -------------------------
+# HUDDLE
+# -------------------------
+elif menu == "Huddle":
+    st.header("Huddle Script")
+
+    results = st.session_state.results
+
+    if not results:
+        st.warning("No data yet.")
+    else:
+        st.code(results.get("huddle", ""), language="markdown")
