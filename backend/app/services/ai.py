@@ -1,22 +1,18 @@
 import os
-from dotenv import load_dotenv
 from openai import OpenAI
+from dotenv import load_dotenv
 
-# ================================
-# 🔑 LOAD ENV
-# ================================
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
-
-client = OpenAI(api_key=api_key)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ================================
-# 🧠 MAIN AI ANALYSIS
+# 🧠 DISTRICT-LEVEL ANALYSIS
 # ================================
 def generate_ai_insights(text: str):
+
     if not text:
-        return "No report text provided."
+        return "No report provided."
 
     try:
         response = client.chat.completions.create(
@@ -24,29 +20,26 @@ def generate_ai_insights(text: str):
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are an elite retail operations analyst. "
-                        "You analyze messy district/store reports and produce executive-level insights."
-                    )
+                    "content": "You are an elite retail operations analyst. You turn messy reports into clear executive decisions."
                 },
                 {
                     "role": "user",
                     "content": f"""
-Analyze this retail report:
+Analyze this district report:
 
 {text}
 
-Return:
-- Executive summary
-- Key risks
-- Store-level insights
-- Recommended actions
+Return structured output:
 
-Be concise, structured, and business-focused.
+## Executive Summary
+## Key Risks
+## Store-Level Issues
+## Recommended Actions
+
+Be concise and actionable.
 """
                 }
-            ],
-            temperature=0.3
+            ]
         )
 
         return response.choices[0].message.content
@@ -56,34 +49,65 @@ Be concise, structured, and business-focused.
 
 
 # ================================
-# 💬 AI CHAT WITH CONTEXT
+# 🏪 STORE-LEVEL ANALYSIS (NEW)
 # ================================
-def chat_with_context(question: str, history: str):
+def analyze_store(store_id: str, context: str):
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are a retail intelligence assistant. "
-                        "You answer questions about store performance, risks, and actions."
-                    )
+                    "content": "You analyze store-level retail performance and identify root causes."
                 },
                 {
                     "role": "user",
                     "content": f"""
-Conversation History:
-{history}
+Context:
+{context}
 
-User Question:
-{question}
+Analyze store {store_id}.
 
-Answer clearly and directly using the context.
+Return:
+- Why this store is at risk
+- What is driving the score
+- What action should be taken
 """
                 }
-            ],
-            temperature=0.4
+            ]
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        return f"AI error: {str(e)}"
+
+
+# ================================
+# 💬 CHAT WITH CONTEXT
+# ================================
+def chat_with_context(question: str, history: str):
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a retail intelligence assistant helping analyze district performance."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+Conversation:
+{history}
+
+Question:
+{question}
+"""
+                }
+            ]
         )
 
         return response.choices[0].message.content
