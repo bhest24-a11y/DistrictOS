@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 from typing import Dict
-import random
 
 from app.services.parsers import parse_text_to_records, normalize_records
 from app.services.ai import generate_ai_insights, chat_with_context, analyze_store
+from app.services.scoring import score_stores, build_district_metrics
 
 from app.db import SessionLocal
 from app.models import Analysis
@@ -11,40 +11,30 @@ from app.models import Analysis
 router = APIRouter()
 
 # =========================
-# ANALYZE TEXT + SAVE (UPGRADED ENGINE)
+# ANALYZE TEXT + SAVE (REAL ENGINE)
 # =========================
 @router.post("/analyze/text")
 async def analyze_text(data: Dict):
 
     text = data.get("text", "")
 
-    # Parse + normalize
+    # -------------------------
+    # PARSE + NORMALIZE
+    # -------------------------
     records = parse_text_to_records(text)
-    records = normalize_records(records)
+    normalized = normalize_records(records)
+    records = normalized["records"]
 
-    # AI SUMMARY (REAL)
+    # -------------------------
+    # 🔥 REAL SCORING ENGINE
+    # -------------------------
+    store_scores, store_flags = score_stores(records)
+    metrics = build_district_metrics(store_scores, store_flags)
+
+    # -------------------------
+    # 🧠 AI SUMMARY
+    # -------------------------
     ai_summary = generate_ai_insights(text)
-
-    # -------------------------
-    # 🔥 SIMULATED ENGINE (NEXT = REAL DATA MODEL)
-    # -------------------------
-    stores = [101, 102, 103, 104, 105]
-
-    store_severity = {s: random.randint(40, 95) for s in stores}
-
-    district_score = sum(store_severity.values()) // len(store_severity)
-
-    priority_stores = sorted(store_severity, key=store_severity.get, reverse=True)
-
-    alerts = [
-        f"Critical issue at store {priority_stores[0]}",
-        f"Warning: staffing gap at store {priority_stores[1]}"
-    ]
-
-    patterns = [
-        "Labor shortages increasing",
-        "Execution inconsistency across region"
-    ]
 
     # -------------------------
     # 💾 SAVE TO DB
@@ -59,21 +49,17 @@ async def analyze_text(data: Dict):
     db.close()
 
     # -------------------------
-    # 📤 RESPONSE (FRONTEND ENGINE)
+    # 📤 FINAL RESPONSE
     # -------------------------
     return {
-        "district_score": district_score,
+        **metrics,
         "summary": ai_summary,
-        "store_severity": store_severity,
-        "priority_stores": priority_stores,
-        "alerts": alerts,
-        "patterns": patterns,
-        "raw_text": text  # 🔥 CRITICAL FOR STORE AI
+        "raw_text": text
     }
 
 
 # =========================
-# 🏪 STORE AI ANALYSIS (NEW)
+# 🏪 STORE AI ANALYSIS
 # =========================
 @router.post("/store/analyze")
 async def analyze_store_route(data: Dict):

@@ -1,46 +1,76 @@
 import re
 from typing import List, Dict
 
-
-# -------------------------
-# CORE PARSER
-# -------------------------
+# =========================
+# PARSE RAW TEXT → RECORDS (ENGINE READY)
+# =========================
 def parse_text_to_records(text: str) -> List[Dict]:
 
-    lines = text.split("\n")
     records = []
+    lines = text.split("\n")
 
     for line in lines:
 
-        # Example formats we handle:
-        # Store 101 Sales: 80 Target: 100 Labor: 120
-        # 102 | sales=90 | labor=110
-
+        # -------------------------
+        # STORE ID
+        # -------------------------
         store_match = re.search(r"\b(\d{3})\b", line)
         if not store_match:
             continue
 
-        store_id = store_match.group(1)
+        store_id = int(store_match.group(1))
 
+        # -------------------------
+        # EXTRACT KPIs
+        # -------------------------
         sales = extract_number(line, "sales")
         labor = extract_number(line, "labor")
         target = extract_number(line, "target")
+        execution = extract_number(line, "execution")
+        customer = extract_number(line, "customer")
 
-        record = {
-            "store": store_id,
-            "sales": sales,
-            "labor": labor,
-            "target": target
-        }
+        # -------------------------
+        # BUILD ENGINE RECORDS
+        # (THIS feeds scoring.py)
+        # -------------------------
+        if sales is not None:
+            records.append({
+                "store_id": store_id,
+                "kpi": "sales",
+                "value": sales,
+                "target": target
+            })
 
-        records.append(record)
+        if labor is not None:
+            records.append({
+                "store_id": store_id,
+                "kpi": "labor",
+                "value": labor,
+                "target": target
+            })
+
+        if execution is not None:
+            records.append({
+                "store_id": store_id,
+                "kpi": "execution",
+                "value": execution,
+                "target": 100
+            })
+
+        if customer is not None:
+            records.append({
+                "store_id": store_id,
+                "kpi": "customer",
+                "value": customer,
+                "target": 100
+            })
 
     return records
 
 
-# -------------------------
+# =========================
 # HELPER: NUMBER EXTRACTION
-# -------------------------
+# =========================
 def extract_number(text: str, keyword: str):
 
     pattern = rf"{keyword}[:=]?\s*(\d+)"
@@ -52,141 +82,87 @@ def extract_number(text: str, keyword: str):
     return None
 
 
-# -------------------------
-# STRUCTURE FOR ENGINE
-# -------------------------
-def normalize_records(records: List[Dict]) -> Dict:
+# =========================
+# NORMALIZE + ENRICH (HYBRID)
+# =========================
+def normalize_records(records: List[Dict]):
 
-    store_severity = {}
+    cleaned = []
     store_metrics = {}
     impacts = {}
-    actions = []
+    actions = set()
 
+    # -------------------------
+    # CLEAN + STANDARDIZE
+    # -------------------------
     for r in records:
-
-        store = r["store"]
-
-        sales = r.get("sales") or 0
-        labor = r.get("labor") or 0
-        target = r.get("target") or 100
-
-        # -------------------------
-        # SEVERITY LOGIC 🔥
-        # -------------------------
-        severity = 0
-
-        if sales < target:
-            severity += (target - sales)
-
-        if labor > target:
-            severity += (labor - target)
-
-        severity = min(100, severity)
-
-        store_severity[store] = severity
-
-        # -------------------------
-        # METRICS
-        # -------------------------
-        store_metrics[store] = [
-            {
-                "metric": "Sales",
-                "actual": sales,
-                "target": target,
-                "variance": sales - target,
-                "status": "bad" if sales < target else "good"
-            },
-            {
-                "metric": "Labor",
-                "actual": labor,
-                "target": target,
-                "variance": labor - target,
-                "status": "bad" if labor > target else "good"
-            }
-        ]
-
-        # -------------------------
-        # IMPACTS
-        # -------------------------
-        store_impacts = []
-
-        if sales < target:
-            store_impacts.append("Sales below target → revenue risk")
-
-        if labor > target:
-            store_impacts.append("Labor above target → margin pressure")
-
-        impacts[store] = store_impacts
-
-        # -------------------------
-        # ACTIONS
-        # -------------------------
-        if sales < target:
-            actions.append(f"Increase sales performance at store {store}")
-
-        if labor > target:
-            actions.append(f"Reduce labor cost at store {store}")
+        try:
+            cleaned.append({
+                "store_id": int(r["store_id"]),
+                "kpi": str(r["kpi"]).lower(),
+                "value": float(r["value"]),
+                "target": float(r.get("target", 100))
+            })
+        except:
+            continue
 
     # -------------------------
-    # PRIORITIZATION
+    # BUILD BUSINESS INTELLIGENCE
+    # (USED BY UI LATER)
     # -------------------------
-    priority_stores = sorted(
-        store_severity,
-        key=store_severity.get,
-        reverse=True
-    )
+    for r in cleaned:
 
-    # -------------------------
-    # DISTRICT SCORE
-    # -------------------------
-    if store_severity:
-        avg_severity = sum(store_severity.values()) / len(store_severity)
-        district_score = int(100 - avg_severity)
-    else:
-        district_score = 100
+        store = r["store_id"]
+        kpi = r["kpi"]
+        value = r["value"]
+        target = r["target"]
 
-    # -------------------------
-    # PATTERNS
-    # -------------------------
-    patterns = []
+        if store not in store_metrics:
+            store_metrics[store] = []
+            impacts[store] = []
 
-    low_sales = [s for s, v in store_severity.items() if v > 50]
-    if low_sales:
-        patterns.append({
-            "metric": "performance",
-            "count": len(low_sales),
-            "stores": low_sales
+        variance = value - target
+
+        status = "good"
+        if (kpi == "sales" and value < target) or \
+           (kpi == "labor" and value > target):
+            status = "bad"
+
+        store_metrics[store].append({
+            "metric": kpi,
+            "actual": value,
+            "target": target,
+            "variance": variance,
+            "status": status
         })
 
-    # -------------------------
-    # ALERTS
-    # -------------------------
-    alerts = []
+        # -------------------------
+        # IMPACTS + ACTIONS
+        # -------------------------
+        if kpi == "sales" and value < target:
+            impacts[store].append("Sales below target → revenue risk")
+            actions.add(f"Increase sales performance at store {store}")
 
-    for s, sev in store_severity.items():
-        if sev > 80:
-            alerts.append(f"Store {s} critical performance issue")
+        if kpi == "labor" and value > target:
+            impacts[store].append("Labor above target → margin pressure")
+            actions.add(f"Reduce labor cost at store {store}")
+
+        if kpi == "execution" and value < 80:
+            impacts[store].append("Execution gap → operational inconsistency")
+            actions.add(f"Improve execution at store {store}")
+
+        if kpi == "customer" and value < 85:
+            impacts[store].append("Customer experience risk")
+            actions.add(f"Improve customer experience at store {store}")
 
     # -------------------------
-    # FINAL STRUCTURE
+    # RETURN STRUCTURE
     # -------------------------
     return {
-        "district_score": district_score,
-        "summary": "Automated analysis of store performance completed.",
-
-        "store_severity": store_severity,
-        "priority_stores": priority_stores[:5],
-
-        "patterns": patterns,
-        "alerts": alerts,
-
-        "impacts": impacts,
-        "actions": list(set(actions)),  # remove duplicates
-
+        "records": cleaned,  # 🔥 feeds scoring engine
         "store_metrics": store_metrics,
-
-        "trend_memory": {},  # will be filled later
-        "risks": [
-            "Underperformance detected across multiple stores"
-        ]
+        "impacts": impacts,
+        "actions": list(actions),
+        "trend_memory": {},
+        "risks": ["Multi-store performance variability detected"]
     }
