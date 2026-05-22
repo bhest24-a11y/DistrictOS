@@ -1,101 +1,144 @@
 from collections import defaultdict
 
 # =========================
+# DEFAULT KPI WEIGHTS (CONFIGURABLE)
+# =========================
+DEFAULT_WEIGHTS = {
+    "sales": 0.4,
+    "labor": 0.25,
+    "execution": 0.2,
+    "customer": 0.15
+}
+
+# =========================
+# KPI SCORING LOGIC
+# =========================
+def score_kpi(kpi, value, target):
+
+    if target is None or target == 0:
+        return 50  # neutral if unknown
+
+    if kpi == "sales":
+        if value >= target:
+            return 100
+        return max(0, 100 - ((target - value) / target * 100))
+
+    elif kpi == "labor":
+        if value <= target:
+            return 100
+        return max(0, 100 - ((value - target) / target * 100))
+
+    elif kpi in ["execution", "customer"]:
+        return max(0, min(100, value))  # clamp
+
+    return 50
+
+
+# =========================
 # STORE SCORING ENGINE
 # =========================
-def score_stores(records):
+def score_stores(records, weights=None):
 
-    store_scores = defaultdict(int)
+    if not weights:
+        weights = DEFAULT_WEIGHTS
+
+    store_scores = {}
     store_flags = defaultdict(list)
+    store_kpi_scores = defaultdict(dict)
+    store_kpi_coverage = defaultdict(set)
 
     for r in records:
+        store = r["store_id"]
+        kpi = r["kpi"]
+        value = r["value"]
+        target = r.get("target", 100)
 
-        store = r.get("store_id")
-        kpi = r.get("kpi")
-        value = r.get("value")
+        score = score_kpi(kpi, value, target)
 
-        if not store:
-            continue
+        store_kpi_scores[store][kpi] = score
+        store_kpi_coverage[store].add(kpi)
 
-        # -------------------------
-        # RULES ENGINE
-        # -------------------------
+        # FLAGGING
+        if score < 60:
+            store_flags[store].append(f"{kpi} underperforming ({int(score)})")
 
-        # SALES
-        if kpi == "sales":
-            if value < 80:
-                store_scores[store] += 20
-                store_flags[store].append("Low sales")
+    # =========================
+    # WEIGHTED FINAL SCORE
+    # =========================
+    for store, kpis in store_kpi_scores.items():
 
-        # LABOR
-        if kpi == "labor":
-            if value < 70:
-                store_scores[store] += 15
-                store_flags[store].append("Labor shortage")
+        weighted_score = 0
+        total_weight = 0
 
-        # EXECUTION
-        if kpi == "execution":
-            if value < 75:
-                store_scores[store] += 25
-                store_flags[store].append("Execution gap")
+        for kpi, score in kpis.items():
+            weight = weights.get(kpi, 0)
+            weighted_score += score * weight
+            total_weight += weight
 
-        # CUSTOMER
-        if kpi == "customer":
-            if value < 85:
-                store_scores[store] += 10
-                store_flags[store].append("Customer risk")
+        if total_weight == 0:
+            final_score = 0
+        else:
+            final_score = int(weighted_score / total_weight)
 
-    return dict(store_scores), dict(store_flags)
+        store_scores[store] = final_score
+
+        # Coverage warning
+        if len(store_kpi_coverage[store]) < 2:
+            store_flags[store].append("Low data coverage")
+
+    return store_scores, dict(store_flags)
 
 
 # =========================
-# DISTRICT AGGREGATION
+# DISTRICT METRICS BUILDER
 # =========================
 def build_district_metrics(store_scores, store_flags):
 
     if not store_scores:
         return {}
 
-    # Normalize to 0–100 severity
-    max_score = max(store_scores.values()) or 1
-
-    normalized = {
-        s: int((score / max_score) * 100)
-        for s, score in store_scores.items()
+    # Severity = inverse of score
+    store_severity = {
+        s: 100 - score for s, score in store_scores.items()
     }
 
-    # Priority stores
-    priority = sorted(normalized, key=normalized.get, reverse=True)
+    priority_stores = sorted(
+        store_severity,
+        key=store_severity.get,
+        reverse=True
+    )
 
-    # District score (inverse of severity)
-    avg_severity = sum(normalized.values()) / len(normalized)
-    district_score = int(100 - avg_severity)
+    district_score = sum(store_scores.values()) // len(store_scores)
 
-    # Alerts
+    # =========================
+    # ALERTS
+    # =========================
     alerts = []
-    for s, flags in store_flags.items():
-        for f in flags:
-            if "gap" in f.lower() or "shortage" in f.lower():
-                alerts.append(f"Critical: {f} at store {s}")
-            else:
-                alerts.append(f"Warning: {f} at store {s}")
 
-    # Patterns (simple aggregation)
-    pattern_counts = defaultdict(int)
-    for flags in store_flags.values():
-        for f in flags:
-            pattern_counts[f] += 1
+    for s, sev in store_severity.items():
+        if sev > 50:
+            alerts.append(f"Critical: Store {s} severe risk")
+        elif sev > 30:
+            alerts.append(f"Warning: Store {s} declining")
 
-    patterns = [
-        f"{k} occurring in {v} stores"
-        for k, v in pattern_counts.items()
-        if v > 1
-    ]
+    # =========================
+    # PATTERNS
+    # =========================
+    patterns = []
+
+    high_risk = [s for s, v in store_severity.items() if v > 40]
+
+    if len(high_risk) >= 3:
+        patterns.append("Systemic multi-store degradation trend")
+
+    if district_score < 70:
+        patterns.append("District-wide performance below standard")
 
     return {
-        "store_severity": normalized,
-        "priority_stores": priority,
         "district_score": district_score,
+        "store_severity": store_severity,
+        "priority_stores": priority_stores[:5],
         "alerts": alerts,
-        "patterns": patterns
+        "patterns": patterns,
+        "store_flags": store_flags
     }

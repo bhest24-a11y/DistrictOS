@@ -18,48 +18,46 @@ async def analyze_text(data: Dict):
 
     text = data.get("text", "")
 
-    # -------------------------
     # PARSE + NORMALIZE
-    # -------------------------
     records = parse_text_to_records(text)
     normalized = normalize_records(records)
     records = normalized["records"]
 
-    # -------------------------
-    # 🔥 REAL SCORING ENGINE
-    # -------------------------
+    # SCORING ENGINE
     store_scores, store_flags = score_stores(records)
     metrics = build_district_metrics(store_scores, store_flags)
 
-    # -------------------------
-    # 🧠 AI SUMMARY
-    # -------------------------
-    ai_summary = generate_ai_insights(text)
+    # AI (NOW USING STRUCTURED DATA 🔥)
+    ai_summary = generate_ai_insights({
+        "raw_text": text,
+        "metrics": metrics,
+        "impacts": normalized.get("impacts"),
+        "actions": normalized.get("actions")
+    })
 
-    # -------------------------
-    # 💾 SAVE TO DB
-    # -------------------------
+    # SAVE EVERYTHING (SaaS READY)
     db = SessionLocal()
     new_analysis = Analysis(
         raw_text=text,
-        summary=ai_summary
+        summary=ai_summary,
+        store_severity=metrics.get("store_severity"),
+        alerts=metrics.get("alerts"),
+        patterns=metrics.get("patterns")
     )
     db.add(new_analysis)
     db.commit()
     db.close()
 
-    # -------------------------
-    # 📤 FINAL RESPONSE
-    # -------------------------
     return {
         **metrics,
         "summary": ai_summary,
+        "impacts": normalized.get("impacts"),
+        "actions": normalized.get("actions"),
         "raw_text": text
     }
 
-
 # =========================
-# 🏪 STORE AI ANALYSIS
+# STORE AI
 # =========================
 @router.post("/store/analyze")
 async def analyze_store_route(data: Dict):
@@ -71,9 +69,8 @@ async def analyze_store_route(data: Dict):
 
     return {"insight": result}
 
-
 # =========================
-# 📊 HISTORY
+# HISTORY
 # =========================
 @router.get("/history")
 def get_history():
@@ -91,9 +88,8 @@ def get_history():
         for r in results
     ]
 
-
 # =========================
-# 💬 AI CHAT
+# CHAT
 # =========================
 @router.post("/chat")
 async def chat(data: Dict):
