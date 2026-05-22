@@ -1,65 +1,59 @@
 from fastapi import APIRouter, UploadFile
 from typing import Dict
-
-# 🔥 Core services
 from app.services.parsers import parse_text_to_records, normalize_records
-from app.services.ai import generate_ai_insights
+from app.services.ai import generate_ai_insights, chat_with_context
+
+from app.db import SessionLocal
+from app.models import Analysis
 
 router = APIRouter()
 
-# -------------------------
-# ANALYZE TEXT
-# -------------------------
+# =========================
+# ANALYZE TEXT + SAVE
+# =========================
 @router.post("/analyze/text")
 async def analyze_text(data: Dict):
     text = data.get("text", "")
 
-    # 🔹 Parse + normalize
     records = parse_text_to_records(text)
-    results = normalize_records(records)
+    records = normalize_records(records)
 
-    # 🔥 REAL AI INTEGRATION
     ai_summary = generate_ai_insights(text)
-    results["summary"] = ai_summary
 
-    return results
+    # SAVE TO DB
+    db = SessionLocal()
+    new_analysis = Analysis(
+        raw_text=text,
+        summary=ai_summary
+    )
+    db.add(new_analysis)
+    db.commit()
+    db.close()
 
+    records["summary"] = ai_summary
+    return records
 
-# -------------------------
-# ANALYZE UPLOAD
-# -------------------------
-@router.post("/analyze/upload")
-async def analyze_upload(file: UploadFile):
-    contents = await file.read()
+# =========================
+# GET HISTORY
+# =========================
+@router.get("/history")
+def get_history():
+    db = SessionLocal()
+    results = db.query(Analysis).order_by(Analysis.created_at.desc()).limit(10).all()
+    db.close()
 
-    try:
-        text = contents.decode("utf-8")
-    except:
-        return {"error": "File must be text-readable (UTF-8)"}
+    return [
+        {"id": r.id, "summary": r.summary, "created_at": str(r.created_at)}
+        for r in results
+    ]
 
-    # 🔹 Parse + normalize
-    records = parse_text_to_records(text)
-    results = normalize_records(records)
+# =========================
+# AI CHAT OVER DATA
+# =========================
+@router.post("/chat")
+async def chat(data: Dict):
+    question = data.get("question", "")
+    history = data.get("context", "")
 
-    # 🔥 ADD AI HERE TOO (IMPORTANT)
-    ai_summary = generate_ai_insights(text)
-    results["summary"] = ai_summary
-
-    return results
-
-
-# -------------------------
-# SIMPLE Q&A (KEEP FOR NOW)
-# -------------------------
-@router.post("/ask")
-async def ask(data: Dict):
-    q = data.get("question", "").lower()
-
-    if "worst" in q:
-        return {"response": "Highest severity store is your top priority."}
-    if "fix" in q:
-        return {"response": "Focus on reducing labor and improving sales performance."}
-    if "risk" in q:
-        return {"response": "Primary risk is underperformance and margin pressure."}
-
-    return {"response": "Ask about risks, worst stores, or actions."}
+    response = chat_with_context(question, history)
+    return {"response": response}
