@@ -1,4 +1,41 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+from ..db import SessionLocal
+from ..models import OSAAlert
+from ..services.osa_scoring import calculate_osa_alerts
+from datetime import date
+
+router = APIRouter()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@router.post("/osa/run")
+def run_osa_job(db: Session = Depends(get_db)):
+    """Trigger OSA calculation. Run nightly via Render cron."""
+    count = calculate_osa_alerts(db)
+    return {"status": "success", "alerts_generated": count}
+
+@router.get("/osa/alerts")
+def get_osa_alerts(
+    business_date: date = Query(None),
+    district: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Fetch OSA alerts for cockpit."""
+    query = db.query(OSAAlert)
+    if business_date:
+        query = query.filter(OSAAlert.business_date == business_date)
+    if district:
+        query = query.join(Store).filter(Store.district == district)
+    
+    alerts = query.order_by(OSAAlert.est_missed_sales.desc()).all()
+    return {"alerts": alerts, "count": len(alerts)}from fastapi import APIRouter
+    
 from typing import Dict
 
 from app.services.parsers import parse_text_to_records, normalize_records
